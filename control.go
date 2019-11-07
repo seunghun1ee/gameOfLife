@@ -1,7 +1,8 @@
-package main
+package main //Onions
 
 import (
 	"fmt"
+
 	"github.com/nsf/termbox-go"
 )
 

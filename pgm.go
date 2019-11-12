@@ -25,7 +25,7 @@ func writePgmImage(p golParams, i ioChans) {
 	defer file.Close()
 
 	_, _ = file.WriteString("P5\n")
-	//_, _ = file.WriteString("# PGM file writer by pnmmodules (https://github.com/owainkenwayucl/pnmmodules).\n")
+	_, _ = file.WriteString("# PGM file writer by pnmmodules (https://github.com/owainkenwayucl/pnmmodules).\n")
 	_, _ = file.WriteString(strconv.Itoa(p.imageWidth))
 	_, _ = file.WriteString(" ")
 	_, _ = file.WriteString(strconv.Itoa(p.imageHeight))
@@ -42,7 +42,7 @@ func writePgmImage(p golParams, i ioChans) {
 
 	for y := 0; y < p.imageHeight; y++ {
 		for x := 0; x < p.imageWidth; x++ {
-			world[y][x] = <-i.distributor.outputVal
+			world[y][x] = <- i.distributor.outputVal
 		}
 	}
 

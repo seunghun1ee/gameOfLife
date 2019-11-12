@@ -61,6 +61,11 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 
 			}
 		}
+		for y := 0; y < p.imageHeight; y++ {
+			for x := 0; x < p.imageWidth; x++ {
+				world[y][x] = newWorld[y][x]
+			}
+		}
 	}
 
 	// Create an empty slice to store coordinates of cells that are still alive after p.turns are done.

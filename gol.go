@@ -39,15 +39,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		for y := 0; y < p.imageHeight; y++ {
 			for x := 0; x < p.imageWidth; x++ {
 				count := 0
-				// First logic, calculating alive or dead
 
-				for i := 0; i < 3; i++ {
-					for j := 0; j < 3; j++ {
-						if world[(y-1+i+p.imageHeight)%p.imageHeight][(x-1+j+p.imageWidth)%p.imageWidth] == 0xFF {
-							count++
-						}
-					}
-				}
 				if world[y][x] == 0xFF {
 					count--
 					if count < 2 || count > 3 {
@@ -71,6 +63,14 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			if newWorld[y][x] != 0 {
 				finalAlive = append(finalAlive, cell{x: x, y: y})
 			}
+		}
+	}
+
+	d.io.command <- ioOutput
+	d.io.filename <- strings.Join([]string{strconv.Itoa(p.imageWidth), strconv.Itoa(p.imageHeight), strconv.Itoa(p.turns)}, "X")
+	for y := 0; y < p.imageHeight; y++ {
+		for x := 0; x < p.imageWidth; x++ {
+			d.io.outputVal <- newWorld[y][x]
 		}
 	}
 

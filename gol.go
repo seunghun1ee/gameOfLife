@@ -74,6 +74,13 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		}
 	}
 
+	d.io.command <- ioOutput
+	d.io.filename <- strings.Join([]string{strconv.Itoa(p.imageWidth), strconv.Itoa(p.imageHeight), strconv.Itoa(p.turns)}, "X")
+	for y := 0; y < p.imageHeight; y++ {
+		for x := 0; x < p.imageWidth; x++ {
+			d.io.inputVal <- []byte{world[y][x]}
+		}
+	}
 
 	// Make sure that the Io has finished any output before exiting.
 	d.io.command <- ioCheckIdle

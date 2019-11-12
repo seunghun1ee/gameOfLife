@@ -44,6 +44,9 @@ func writePgmImage(p golParams, i ioChans) {
 			world[y][x] = <-i.distributor.outputVal
 		}
 	}
+	ioError = file.Sync()
+	check(ioError)
+	fmt.Println("File", filename, "output done!")
 
 }
 

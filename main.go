@@ -79,6 +79,7 @@ func gameOfLife(p golParams, keyChan <-chan rune) []cell {
 
 	ioFilename := make(chan string)
 	dChans.io.filename = ioFilename
+	ioChans.distributor.filename = ioFilename
 
 	inputVal := make(chan uint8)
 	dChans.io.inputVal = inputVal

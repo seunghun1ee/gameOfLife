@@ -39,7 +39,15 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		for y := 0; y < p.imageHeight; y++ {
 			for x := 0; x < p.imageWidth; x++ {
 				count := 0
+				// First logic, calculating alive or dead
 
+				for i := 0; i < 3; i++ {
+					for j := 0; j < 3; j++ {
+						if world[(y-1+i+p.imageHeight)%p.imageHeight][(x-1+j+p.imageWidth)%p.imageWidth] == 0xFF {
+							count++
+						}
+					}
+				}
 				if world[y][x] == 0xFF {
 					count--
 					if count < 2 || count > 3 {

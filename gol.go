@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func golLogic(p golParams, world [][]byte, startY int, endY int, startX int, endX int) [][]byte {
+func golLogic(world [][]byte, startY int, endY int, startX int, endX int) [][]byte {
 	height := endY - startY
 	width := endX - startX
 	//init result
@@ -47,16 +47,18 @@ func golLogic(p golParams, world [][]byte, startY int, endY int, startX int, end
 	return result
 }
 
+func worker (p golParams, world [][]byte, startY int, endY int, startX int, endX int, out chan<- [][]byte) {
+	out <- golLogic(world, startY, endY, startX, endX)
+}
+
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p golParams, d distributorChans, alive chan []cell) {
 
 	// Create the 2D slice to store the world.
 	// Create new world here
 	world := make([][]byte, p.imageHeight)
-	//newWorld := make([][]byte, p.imageHeight)
 	for i := range world {
 		world[i] = make([]byte, p.imageWidth)
-		//newWorld[i] = make([]byte, p.imageWidth)
 	}
 
 	// Request the io goroutine to read in the image with the given filename.
@@ -90,37 +92,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 
 	// Calculate the new state of Game of Life after the given number of turns.
 	for turns := 0; turns < p.turns; turns++ {
-		/*
-		for y := 0; y < p.imageHeight; y++ {
-			for x := 0; x < p.imageWidth; x++ {
-				count := 0
-				// First logic, calculating alive or dead
-
-				for i := 0; i < 3; i++ {
-					for j := 0; j < 3; j++ {
-						if world[(y-1+i+p.imageHeight)%p.imageHeight][(x-1+j+p.imageWidth)%p.imageWidth] == 0xFF {
-							count++
-						}
-					}
-				}
-				if world[y][x] == 0xFF {
-					count--
-					if count < 2 || count > 3 {
-						newWorld[y][x] = 0x00
-					}
-				} else {
-					if count == 3 {
-						newWorld[y][x] = 0xFF
-					}
-				}
-
-			}
-		}
-
-		 */
-
-		newWorld := golLogic(p, world, 0, p.imageHeight, 0, p.imageWidth)
-
+		newWorld := golLogic(world, 0, p.imageHeight, 0, p.imageWidth)
 		for y := 0; y < p.imageHeight; y++ {
 			for x := 0; x < p.imageWidth; x++ {
 				world[y][x] = newWorld[y][x]

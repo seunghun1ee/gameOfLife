@@ -72,23 +72,16 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			if val != 0 {
 				fmt.Println("Alive cell at", x, y)
 				world[y][x] = val
-				//newWorld[y][x] = val
 			}
 		}
 	}
 
-	/*
-	threads := make([][][]byte, p.threads)
-	threadHeight := p.imageHeight/p.threads
-	for t := 0; t < p.threads; t++ {
-		for y := threadHeight*t; y < threadHeight*(t+1); y++ {
-			for x:= 0; x < p.imageWidth; x++ {
-				threads[t][y][x] = world[y][x]
-			}
-		}
+	workerChans := make([]chan [][]byte, p.threads)
+	for i := range workerChans {
+		workerChans[i] = make(chan [][]byte)
 	}
 
-	 */
+
 
 	// Calculate the new state of Game of Life after the given number of turns.
 	for turns := 0; turns < p.turns; turns++ {

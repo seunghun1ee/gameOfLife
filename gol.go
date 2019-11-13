@@ -2,16 +2,17 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
 
 func golLogic(world [][]byte, startY int, endY int, startX int, endX int) [][]byte {
-	height := endY - startY
+	height := math.Abs(float64(endY - startY))
 	width := endX - startX
 	//init result
-	result := make([][]byte, height)
-	for i := range world {
+	result := make([][]byte, int(height))
+	for i := range result {
 		result[i] = make([]byte, width)
 	}
 	for y := startY; y < endY; y++ {
@@ -21,7 +22,7 @@ func golLogic(world [][]byte, startY int, endY int, startX int, endX int) [][]by
 			//counts neighbors
 			for i := 0; i < 3; i++ {
 				for j := 0; j < 3; j++ {
-					if world[(y-1+i+height)%height][(x-1+j+width)%width] == 0xFF {
+					if world[(y-1+i+int(height))%int(height)][(x-1+j+width)%width] == 0xFF {
 						count++
 					}
 				}
@@ -80,6 +81,13 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 	for i := range workerChans {
 		workerChans[i] = make(chan [][]byte)
 	}
+	threadHeight := p.imageHeight/p.threads
+
+	for i := range workerChans {
+		go worker(p, world,(-1+i*threadHeight+threadHeight)%threadHeight, (1+(i+1)*threadHeight+threadHeight)%threadHeight, 0, p.imageWidth - 1, workerChans[i])
+	}
+
+
 
 
 

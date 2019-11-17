@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -13,6 +14,47 @@ func allocateSlice(height int, width int) [][]byte {
 	}
 	fmt.Println("allocateSlice successfully finished")
 	return slice
+}
+
+func OLDgolLogic(world [][]byte, startY int, endY int, startX int, endX int) [][]byte {
+	height := math.Abs(float64(endY - startY))
+	width := endX - startX
+	//init result
+	result := make([][]byte, int(height))
+	for i := range result {
+		result[i] = make([]byte, width)
+	}
+	for y := startY; y < endY; y++ {
+		for x := startX; x < endX; x++ {
+			count := 0
+
+			//counts neighbors
+			for i := 0; i < 3; i++ {
+				for j := 0; j < 3; j++ {
+					if world[(y-1+i+int(height))%int(height)][(x-1+j+width)%width] == 0xFF {
+						count++
+					}
+				}
+			}
+			//calculating alive or dead
+			if world[y][x] == 0xFF {
+				count--
+				if count < 2 || count > 3 {
+					result[y][x] = 0x00
+				} else {
+					result[y][x] = world[y][x]
+				}
+			} else {
+				if count == 3 {
+					result[y][x] = 0xFF
+				} else {
+					result[y][x] = world[y][x]
+				}
+			}
+
+		}
+	}
+	return result
 }
 
 func golLogic(p golParams, start [][]byte) [][]byte {
@@ -116,7 +158,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 
 	// Calculate the new state of Game of Life after the given number of turns.
 	for turns := 0; turns < p.turns; turns++ {
-		newWorld := golLogic(world, 0, p.imageHeight, 0, p.imageWidth)
+		newWorld := OLDgolLogic(world, 0, p.imageHeight, 0, p.imageWidth)
 		for y := 0; y < p.imageHeight; y++ {
 			for x := 0; x < p.imageWidth; x++ {
 				world[y][x] = newWorld[y][x]

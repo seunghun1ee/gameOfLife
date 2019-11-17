@@ -12,7 +12,6 @@ func allocateSlice(height int, width int) [][]byte {
 	for i := range slice {
 		slice[i] = make([]byte, width)
 	}
-	fmt.Println("allocateSlice successfully finished")
 	return slice
 }
 
@@ -58,20 +57,10 @@ func OLDgolLogic(world [][]byte, startY int, endY int, startX int, endX int) [][
 }
 
 func golLogic(p golParams, start [][]byte) [][]byte {
-	threadHeight := p.imageHeight / p.threads
-	height := threadHeight + 2
-	width := p.imageWidth
+	height := len(start)
+	width := len(start[0])
 	//init result
-	//start := allocateSlice(height, width)
 	result := allocateSlice(height, width)
-	/*
-		for y := 0; y < height; y++ {
-			for x := 0; x < width; x++ {
-				start[y][x] = cell
-			}
-		}
-
-	*/
 
 	for y := 1; y < height-1; y++ {
 		for x := 0; x < width; x++ {
@@ -86,14 +75,14 @@ func golLogic(p golParams, start [][]byte) [][]byte {
 				}
 			}
 			//calculating alive or dead
-			if start[y][x] == 0xFF {
-				count--
+			if start[y][x] == 0xFF { //if the cell is alive
+				count-- //excludes itself
 				if count < 2 || count > 3 {
 					result[y][x] = 0x00
 				} else {
 					result[y][x] = 0xFF
 				}
-			} else {
+			} else { //if the cell is dead
 				if count == 3 {
 					result[y][x] = 0xFF
 				} else {
@@ -106,16 +95,31 @@ func golLogic(p golParams, start [][]byte) [][]byte {
 	return result
 }
 
-func worker(p golParams, cell byte, out chan<- [][]byte) {
+func worker(p golParams, cellChan <-chan byte, out chan<- [][]byte) {
 	height := p.imageHeight/p.threads + 2
 	width := p.imageWidth
+
+	//Makes thread with incoming cells
 	start := allocateSlice(height, width)
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
+			cell := <-cellChan
 			start[y][x] = cell
 		}
 	}
 	out <- golLogic(p, start)
+}
+
+func removeHalo(input [][]byte) [][]byte {
+	height := len(input) - 2
+	width := len(input[0])
+	output := allocateSlice(height, width)
+	for y := 1; y < height+1; y++ {
+		for x := 0; x < width; x++ {
+			output[y-1][x] = input[y][x]
+		}
+	}
+	return output
 }
 
 // distributor divides the work between workers and interacts with other goroutines.
@@ -124,8 +128,10 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 	// Create the 2D slice to store the world.
 	// Create new world here
 	world := make([][]byte, p.imageHeight)
+	newWorld := make([][]byte, p.imageHeight)
 	for i := range world {
 		world[i] = make([]byte, p.imageWidth)
+		newWorld[i] = make([]byte, p.imageWidth)
 	}
 
 	// Request the io goroutine to read in the image with the given filename.
@@ -143,25 +149,57 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		}
 	}
 
-	workerChans := make([]chan byte, p.threads)
-	for i := range workerChans {
-		workerChans[i] = make(chan byte)
-	}
-	//threadHeight := p.imageHeight/p.threads
-
-	/*
-		for i := range workerChans {
-			go worker(p, world,(-1+i*threadHeight+threadHeight)%threadHeight, (1+(i+1)*threadHeight+threadHeight)%threadHeight, 0, p.imageWidth - 1, workerChans[i])
-		}
-
-	*/
-
 	// Calculate the new state of Game of Life after the given number of turns.
 	for turns := 0; turns < p.turns; turns++ {
-		newWorld := OLDgolLogic(world, 0, p.imageHeight, 0, p.imageWidth)
+		//Init slices of chan byte and chan [][]byte
+		golHalos := make([][][]byte, p.threads)
+		golNonHalos := make([][][]byte, p.threads)
+		golWorkerChans := make([]chan byte, p.threads)
+		golResultChans := make([]chan [][]byte, p.threads)
+		for i := range golWorkerChans {
+			golWorkerChans[i] = make(chan byte)
+		}
+		//Go routine starts here
+		for i := range golWorkerChans {
+			go worker(p, golWorkerChans[i], golResultChans[i])
+		}
+
+		//Upper halo
+		for x := 0; x < p.imageWidth; x++ {
+			for i := range golWorkerChans {
+				golWorkerChans[i] <- world[(i*(p.imageHeight/p.threads)-1+p.imageHeight)%p.imageHeight][x]
+			}
+		}
+		//mid
+		for y := 0; y < p.imageWidth/p.threads; y++ {
+			for x := 0; x < p.imageWidth; x++ {
+				for i := range golWorkerChans {
+					golWorkerChans[i] <- world[y+(i*p.imageHeight/p.threads)][x]
+				}
+			}
+		}
+		//Lower halo
+		for x := 0; x < p.imageWidth; x++ {
+			for i := range golWorkerChans {
+				golWorkerChans[i] <- world[(i+1)*(p.imageHeight/p.threads)%p.imageHeight][x]
+			}
+		}
+
+		for i := range golResultChans {
+			golHalos[i] = <-golResultChans[i]
+			golNonHalos[i] = removeHalo(golHalos[i])
+
+			for y := 0; y < p.imageHeight/p.threads; y++ {
+				for x := 0; x < p.imageWidth; x++ {
+					newWorld[y+(p.imageWidth/p.threads*i)][x] = golNonHalos[i][y][x]
+				}
+			}
+		}
+
+		OLDnewWorld := OLDgolLogic(world, 0, p.imageHeight, 0, p.imageWidth)
 		for y := 0; y < p.imageHeight; y++ {
 			for x := 0; x < p.imageWidth; x++ {
-				world[y][x] = newWorld[y][x]
+				world[y][x] = OLDnewWorld[y][x]
 			}
 		}
 	}

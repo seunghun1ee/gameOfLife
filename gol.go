@@ -2,44 +2,60 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 )
 
-func golLogic(world [][]byte, startY int, endY int, startX int, endX int) [][]byte {
-	height := math.Abs(float64(endY - startY))
-	width := endX - startX
-	//init result
-	result := make([][]byte, int(height))
-	for i := range result {
-		result[i] = make([]byte, width)
+func allocateSlice(height int, width int) [][]byte {
+	slice := make([][]byte, height)
+	for i := range slice {
+		slice[i] = make([]byte, width)
 	}
-	for y := startY; y < endY; y++ {
-		for x := startX; x < endX; x++ {
+	fmt.Println("allocateSlice successfully finished")
+	return slice
+}
+
+func golLogic(p golParams, start [][]byte) [][]byte {
+	threadHeight := p.imageHeight / p.threads
+	height := threadHeight + 2
+	width := p.imageWidth
+	//init result
+	//start := allocateSlice(height, width)
+	result := allocateSlice(height, width)
+	/*
+		for y := 0; y < height; y++ {
+			for x := 0; x < width; x++ {
+				start[y][x] = cell
+			}
+		}
+
+	*/
+
+	for y := 1; y < height-1; y++ {
+		for x := 0; x < width; x++ {
 			count := 0
 
 			//counts neighbors
 			for i := 0; i < 3; i++ {
 				for j := 0; j < 3; j++ {
-					if world[(y-1+i+int(height))%int(height)][(x-1+j+width)%width] == 0xFF {
+					if start[y-1+i][(x-1+j+width)%width] == 0xFF {
 						count++
 					}
 				}
 			}
 			//calculating alive or dead
-			if world[y][x] == 0xFF {
+			if start[y][x] == 0xFF {
 				count--
 				if count < 2 || count > 3 {
 					result[y][x] = 0x00
 				} else {
-					result[y][x] = world[y][x]
+					result[y][x] = 0xFF
 				}
 			} else {
 				if count == 3 {
 					result[y][x] = 0xFF
 				} else {
-					result[y][x] = world[y][x]
+					result[y][x] = 0x00
 				}
 			}
 
@@ -48,8 +64,16 @@ func golLogic(world [][]byte, startY int, endY int, startX int, endX int) [][]by
 	return result
 }
 
-func worker (p golParams, world [][]byte, startY int, endY int, startX int, endX int, out chan<- [][]byte) {
-	out <- golLogic(world, startY, endY, startX, endX)
+func worker(p golParams, cell byte, out chan<- [][]byte) {
+	height := p.imageHeight/p.threads + 2
+	width := p.imageWidth
+	start := allocateSlice(height, width)
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			start[y][x] = cell
+		}
+	}
+	out <- golLogic(p, start)
 }
 
 // distributor divides the work between workers and interacts with other goroutines.
@@ -77,19 +101,18 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		}
 	}
 
-	workerChans := make([]chan [][]byte, p.threads)
+	workerChans := make([]chan byte, p.threads)
 	for i := range workerChans {
-		workerChans[i] = make(chan [][]byte)
+		workerChans[i] = make(chan byte)
 	}
-	threadHeight := p.imageHeight/p.threads
+	//threadHeight := p.imageHeight/p.threads
 
-	for i := range workerChans {
-		go worker(p, world,(-1+i*threadHeight+threadHeight)%threadHeight, (1+(i+1)*threadHeight+threadHeight)%threadHeight, 0, p.imageWidth - 1, workerChans[i])
-	}
+	/*
+		for i := range workerChans {
+			go worker(p, world,(-1+i*threadHeight+threadHeight)%threadHeight, (1+(i+1)*threadHeight+threadHeight)%threadHeight, 0, p.imageWidth - 1, workerChans[i])
+		}
 
-
-
-
+	*/
 
 	// Calculate the new state of Game of Life after the given number of turns.
 	for turns := 0; turns < p.turns; turns++ {

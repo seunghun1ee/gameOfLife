@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 )
@@ -15,48 +14,7 @@ func allocateSlice(height int, width int) [][]byte {
 	return slice
 }
 
-func OLDgolLogic(world [][]byte, startY int, endY int, startX int, endX int) [][]byte {
-	height := math.Abs(float64(endY - startY))
-	width := endX - startX
-	//init result
-	result := make([][]byte, int(height))
-	for i := range result {
-		result[i] = make([]byte, width)
-	}
-	for y := startY; y < endY; y++ {
-		for x := startX; x < endX; x++ {
-			count := 0
-
-			//counts neighbors
-			for i := 0; i < 3; i++ {
-				for j := 0; j < 3; j++ {
-					if world[(y-1+i+int(height))%int(height)][(x-1+j+width)%width] == 0xFF {
-						count++
-					}
-				}
-			}
-			//calculating alive or dead
-			if world[y][x] == 0xFF {
-				count--
-				if count < 2 || count > 3 {
-					result[y][x] = 0x00
-				} else {
-					result[y][x] = world[y][x]
-				}
-			} else {
-				if count == 3 {
-					result[y][x] = 0xFF
-				} else {
-					result[y][x] = world[y][x]
-				}
-			}
-
-		}
-	}
-	return result
-}
-
-func golLogic(p golParams, start [][]byte) [][]byte {
+func golLogic(start [][]byte) [][]byte {
 	height := len(start)
 	width := len(start[0])
 	//init result
@@ -92,7 +50,6 @@ func golLogic(p golParams, start [][]byte) [][]byte {
 
 		}
 	}
-	fmt.Println("Logic all applied")
 	return result
 }
 
@@ -108,8 +65,7 @@ func worker(p golParams, cellChan <-chan byte, out chan<- [][]byte) {
 			start[y][x] = cell
 		}
 	}
-	out <- golLogic(p, start)
-	fmt.Println("golLogic result passed")
+	out <- golLogic(start)
 }
 
 func removeHalo(input [][]byte) [][]byte {
@@ -176,7 +132,6 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 				golWorkerChans[i] <- world[(i*(p.imageHeight/p.threads)-1+p.imageHeight)%p.imageHeight][x]
 			}
 		}
-		fmt.Println("Upper halo all sent")
 		//mid
 		for y := 0; y < p.imageWidth/p.threads; y++ {
 			for x := 0; x < p.imageWidth; x++ {
@@ -185,14 +140,12 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 				}
 			}
 		}
-		fmt.Println("Mid all sent")
 		//Lower halo
 		for x := 0; x < p.imageWidth; x++ {
 			for i := range golWorkerChans {
 				golWorkerChans[i] <- world[(i+1)*(p.imageHeight/p.threads)%p.imageHeight][x]
 			}
 		}
-		fmt.Println("Lower halo all sent")
 
 		for i := range golResultChans {
 			golHalos[i] = <-golResultChans[i]
@@ -205,7 +158,6 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			}
 		}
 
-		//OLDnewWorld := OLDgolLogic(world, 0, p.imageHeight, 0, p.imageWidth)
 		for y := 0; y < p.imageHeight; y++ {
 			for x := 0; x < p.imageWidth; x++ {
 				world[y][x] = newWorld[y][x]

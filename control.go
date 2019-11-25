@@ -25,7 +25,6 @@ func getKeyboardCommand(key chan<- rune) {
 func startControlServer(p golParams) {
 	e := termbox.Init()
 	check(e)
-
 	fmt.Println("Threads:", p.threads)
 	fmt.Println("Width:", p.imageWidth)
 	fmt.Println("Height:", p.imageHeight)

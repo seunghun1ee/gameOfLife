@@ -52,6 +52,15 @@ func golLogic(start [][]byte) [][]byte {
 	}
 	return result
 }
+func outputBoard(p golParams, d distributorChans, world [][]byte, turn int) {
+	d.io.command <- ioOutput
+	d.io.filename <- strings.Join([]string{strconv.Itoa(p.imageWidth), strconv.Itoa(p.imageHeight), strconv.Itoa(turn)}, "x")
+	for y := 0; y < p.imageHeight; y++ {
+		for x := 0; x < p.imageWidth; x++ {
+			d.io.outputVal <- world[y][x]
+		}
+	}
+}
 
 func worker(p golParams, cellChan <-chan byte, out chan<- [][]byte) {
 	height := p.imageHeight/p.threads + 2
@@ -163,6 +172,17 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 				world[y][x] = newWorld[y][x]
 			}
 		}
+		select {
+		case r := <-d.io.keyChan:
+			if r == 's' {
+
+				outputBoard(p, d, world, turns)
+			}
+
+		default:
+
+		}
+
 	}
 
 	// Create an empty slice to store coordinates of cells that are still alive after p.turns are done.
@@ -175,14 +195,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			}
 		}
 	}
-
-	d.io.command <- ioOutput
-	d.io.filename <- strings.Join([]string{strconv.Itoa(p.imageWidth), strconv.Itoa(p.imageHeight), strconv.Itoa(p.turns)}, "x")
-	for y := 0; y < p.imageHeight; y++ {
-		for x := 0; x < p.imageWidth; x++ {
-			d.io.outputVal <- world[y][x]
-		}
-	}
+	outputBoard(p, d, world, p.turns)
 
 	// Make sure that the Io has finished any output before exiting.
 	d.io.command <- ioCheckIdle

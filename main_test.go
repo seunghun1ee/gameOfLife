@@ -176,7 +176,8 @@ func Test(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			alive := gameOfLife(test.args.p, nil)
+			timeChan := make(chan bool)
+			alive := gameOfLife(test.args.p, nil, timeChan)
 			fmt.Println("Ran test:", test.name)
 			if test.name != "trace" {
 				assert.ElementsMatch(t, alive, test.args.expectedAlive)
@@ -315,8 +316,9 @@ func Benchmark(b *testing.B) {
 	for _, bm := range benchmarks {
 		os.Stdout = nil // Disable all program output apart from benchmark results
 		b.Run(bm.name, func(b *testing.B) {
+			timeChan := make(chan bool)
 			for i := 0; i < b.N; i++ {
-				gameOfLife(bm.p, nil)
+				gameOfLife(bm.p, nil, timeChan)
 				//fmt.Println("Ran bench:", bm.name)
 			}
 		})

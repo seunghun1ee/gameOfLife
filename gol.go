@@ -181,8 +181,8 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 				fmt.Println("Execution Paused")
 				for x := true; x == true; {
 					select {
-					case rune := <-d.io.keyChan:
-						if rune == 'p' {
+					case pauseInput := <-d.io.keyChan:
+						if pauseInput == 'p' {
 							x = false
 							fmt.Println("Continuing")
 						}

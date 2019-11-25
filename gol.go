@@ -61,6 +61,19 @@ func outputBoard(p golParams, d distributorChans, world [][]byte, turn int) {
 		}
 	}
 }
+func countAlive(p golParams, world [][]byte) []cell {
+	// Create an empty slice to store coordinates of cells that are still alive after p.turns are done.
+	var finalAlive []cell
+	// Go through the world and append the cells that are still alive.
+	for y := 0; y < p.imageHeight; y++ {
+		for x := 0; x < p.imageWidth; x++ {
+			if world[y][x] != 0 {
+				finalAlive = append(finalAlive, cell{x: x, y: y})
+			}
+		}
+	}
+	return finalAlive
+}
 
 func worker(p golParams, cellChan <-chan byte, out chan<- [][]byte) {
 	height := p.imageHeight/p.threads + 2
@@ -179,6 +192,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			}
 			if r == 'p' {
 				fmt.Println("Execution Paused")
+
 				for x := true; x == true; {
 					select {
 					case pauseInput := <-d.io.keyChan:
@@ -192,23 +206,18 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			if r == 'q' {
 				p.turns = turns
 			}
+		case t := <-d.io.timeChan:
+			if t {
+				fmt.Println(len(countAlive(p, world)))
 
+			}
 		default:
 
 		}
 
 	}
 
-	// Create an empty slice to store coordinates of cells that are still alive after p.turns are done.
-	var finalAlive []cell
-	// Go through the world and append the cells that are still alive.
-	for y := 0; y < p.imageHeight; y++ {
-		for x := 0; x < p.imageWidth; x++ {
-			if world[y][x] != 0 {
-				finalAlive = append(finalAlive, cell{x: x, y: y})
-			}
-		}
-	}
+	finalAlive := countAlive(p, world)
 	outputBoard(p, d, world, p.turns)
 
 	// Make sure that the Io has finished any output before exiting.

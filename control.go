@@ -2,6 +2,7 @@ package main //Onions
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/nsf/termbox-go"
 )
@@ -18,6 +19,13 @@ func getKeyboardCommand(key chan<- rune) {
 				key <- event.Ch
 			}
 		}
+	}
+}
+
+func timerControl(timeChan chan bool) {
+	for {
+		time.Sleep(2 * time.Second)
+		timeChan <- true
 	}
 }
 

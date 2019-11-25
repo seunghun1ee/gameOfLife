@@ -175,8 +175,19 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		select {
 		case r := <-d.io.keyChan:
 			if r == 's' {
-
 				outputBoard(p, d, world, turns)
+			}
+			if r == 'p' {
+				fmt.Println("Execution Paused")
+				for x := true; x == true; {
+					select {
+					case rune := <-d.io.keyChan:
+						if rune == 'p' {
+							x = false
+							fmt.Println("Continuing")
+						}
+					}
+				}
 			}
 
 		default:

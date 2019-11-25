@@ -189,6 +189,9 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 					}
 				}
 			}
+			if r == 'q' {
+				p.turns = turns
+			}
 
 		default:
 

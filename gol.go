@@ -6,6 +6,14 @@ import (
 	"strings"
 )
 
+type worker struct {
+	upperSend chan<- byte
+	upperGet  <-chan byte
+	lowerSend chan<- byte
+	lowerGet  <-chan byte
+	signal    chan bool
+}
+
 func allocateSlice(height int, width int) [][]byte {
 	slice := make([][]byte, height)
 	for i := range slice {
@@ -90,7 +98,7 @@ func countAlive(p golParams, world [][]byte) []cell {
 	return finalAlive
 }
 
-func worker(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInfo int) {
+func golWorker(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInfo int) {
 	height := heightInfo + 2
 	width := p.imageWidth
 
@@ -144,6 +152,20 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			}
 		}
 	}
+
+	//Initialise halo channels
+	golWorkerHaloExchanges := make([]chan byte, 2*p.threads)
+	for i := range golWorkerHaloExchanges {
+		golWorkerHaloExchanges[i] = make(chan byte)
+	}
+	/*
+		workers := make([]worker, p.threads)
+		for i := 0; i < p.threads; i++ {
+			workers[i] := worker{upperSend:golWorkerHaloExchanges[i],upperGet:golWorkerHaloExchanges[i + p.threads],lowerSend:}
+		}
+
+	*/
+
 	//Calculating thread height
 	golThreadHeights := calculateThreadHeight(p)
 	for a := range golThreadHeights {
@@ -178,7 +200,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 
 		//Go routine starts here
 		for i := range golWorkerChans {
-			go worker(p, golWorkerChans[i], golResultChans[i], golThreadHeights[i])
+			go golWorker(p, golWorkerChans[i], golResultChans[i], golThreadHeights[i])
 		}
 
 		//Upper halo

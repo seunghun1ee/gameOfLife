@@ -14,6 +14,21 @@ func allocateSlice(height int, width int) [][]byte {
 	return slice
 }
 
+func calculateThreadHeight(p golParams) []int {
+	heightSlice := make([]int, p.threads)
+	leftover := p.imageHeight % p.threads
+	for i := range heightSlice {
+		heightSlice[i] = p.imageHeight / p.threads
+	}
+	if leftover != 0 {
+		for j := 0; leftover > 0 && j < p.threads; j++ {
+			heightSlice[j]++
+			leftover--
+		}
+	}
+	return heightSlice
+}
+
 func golLogic(start [][]byte) [][]byte {
 	height := len(start)
 	width := len(start[0])
@@ -133,9 +148,14 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 	// Calculate the new state of Game of Life after the given number of turns.
 	for turns := 0; turns < p.turns; turns++ {
 		//Init slices of channels and slices of threads
+
+		//Slice of threads after gol logic with halo
 		golHalos := make([][][]byte, p.threads)
+		//Slice of threads after removing halo
 		golNonHalos := make([][][]byte, p.threads)
+		//Slice of channel of workers before gol logic
 		golWorkerChans := make([]chan byte, p.threads)
+		//Slice of channel of workers after gol logic
 		golResultChans := make([]chan [][]byte, p.threads)
 		for i := range golResultChans {
 			golResultChans[i] = make(chan [][]byte, p.imageHeight/p.threads+2)
@@ -143,6 +163,13 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		for i := range golWorkerChans {
 			golWorkerChans[i] = make(chan byte)
 		}
+
+		//Calculating thread height
+		golThreadHeights := calculateThreadHeight(p)
+		for a := range golThreadHeights {
+			fmt.Printf("Thread %d has height %d\n", a, golThreadHeights[a])
+		}
+
 		//Go routine starts here
 		for i := range golWorkerChans {
 			go worker(p, golWorkerChans[i], golResultChans[i])

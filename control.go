@@ -1,4 +1,4 @@
-package main //Onions
+package main
 
 import (
 	"fmt"

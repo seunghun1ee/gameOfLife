@@ -21,9 +21,8 @@ func calculateThreadHeight(p golParams) []int {
 		heightSlice[i] = p.imageHeight / p.threads
 	}
 	if leftover != 0 {
-		for j := 0; leftover > 0 && j < p.threads; {
+		for j := 0; leftover > 0 && j < p.threads; leftover-- {
 			heightSlice[j]++
-			leftover--
 			j = (j + 1) % p.threads
 		}
 	}
@@ -150,6 +149,16 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 	for a := range golThreadHeights {
 		fmt.Printf("Thread %d has height %d\n", a, golThreadHeights[a])
 	}
+	golCumulativeThreadHeights := make([]int, p.threads)
+	for i := range golCumulativeThreadHeights {
+		if i == 0 {
+			golCumulativeThreadHeights[i] = golThreadHeights[i]
+		} else {
+			golCumulativeThreadHeights[i] = golCumulativeThreadHeights[i-1] + golThreadHeights[i]
+		}
+		fmt.Printf("Thread %d has  cumulative height %d\n", i, golCumulativeThreadHeights[i])
+	}
+
 	// Calculate the new state of Game of Life after the given number of turns.
 	for turns := 0; turns < p.turns; turns++ {
 
@@ -200,14 +209,14 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		for i := range golResultChans {
 			golHalos[i] = <-golResultChans[i]
 			golNonHalos[i] = removeHalo(golHalos[i])
-
+			//Passing threads without halo to new world
 			for y := 0; y < p.imageHeight/p.threads; y++ {
 				for x := 0; x < p.imageWidth; x++ {
 					newWorld[y+(p.imageWidth/p.threads*i)][x] = golNonHalos[i][y][x]
 				}
 			}
 		}
-		//Updating the world
+		//Updating the world with new world
 		for y := 0; y < p.imageHeight; y++ {
 			for x := 0; x < p.imageWidth; x++ {
 				world[y][x] = newWorld[y][x]

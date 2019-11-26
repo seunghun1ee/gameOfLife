@@ -90,8 +90,8 @@ func countAlive(p golParams, world [][]byte) []cell {
 	return finalAlive
 }
 
-func worker(p golParams, cellChan <-chan byte, out chan<- [][]byte) {
-	height := p.imageHeight/p.threads + 2
+func worker(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInfo int) {
+	height := heightInfo + 2
 	width := p.imageWidth
 
 	//Makes thread with incoming cells
@@ -150,12 +150,10 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		fmt.Printf("Thread %d has height %d\n", a, golThreadHeights[a])
 	}
 	golCumulativeThreadHeights := make([]int, p.threads)
-	for i := range golCumulativeThreadHeights {
-		if i == 0 {
-			golCumulativeThreadHeights[i] = golThreadHeights[i]
-		} else {
-			golCumulativeThreadHeights[i] = golCumulativeThreadHeights[i-1] + golThreadHeights[i]
-		}
+	golCumulativeThreadHeights[0] = golThreadHeights[0]
+	fmt.Printf("Thread %d has  cumulative height %d\n", 0, golCumulativeThreadHeights[0])
+	for i := 1; i < len(golCumulativeThreadHeights); i++ {
+		golCumulativeThreadHeights[i] = golCumulativeThreadHeights[i-1] + golThreadHeights[i]
 		fmt.Printf("Thread %d has  cumulative height %d\n", i, golCumulativeThreadHeights[i])
 	}
 
@@ -181,27 +179,43 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 
 		//Go routine starts here
 		for i := range golWorkerChans {
-			go worker(p, golWorkerChans[i], golResultChans[i])
+			go worker(p, golWorkerChans[i], golResultChans[i], golThreadHeights[i])
 		}
 
 		//Upper halo
 		for x := 0; x < p.imageWidth; x++ {
 			for i := range golWorkerChans {
-				golWorkerChans[i] <- world[(i*(p.imageHeight/p.threads)-1+p.imageHeight)%p.imageHeight][x]
+				golWorkerChans[i] <- world[golCumulativeThreadHeights[((i-1)+p.threads)%p.threads]-1][x]
 			}
 		}
 		//mid
-		for y := 0; y < p.imageWidth/p.threads; y++ {
+		for y := 0; y < golCumulativeThreadHeights[0]; y++ {
 			for x := 0; x < p.imageWidth; x++ {
-				for i := range golWorkerChans {
-					golWorkerChans[i] <- world[y+(i*p.imageHeight/p.threads)][x]
+				golWorkerChans[0] <- world[y][x]
+			}
+		}
+		for i := 1; i < p.threads; i++ {
+			for y := golCumulativeThreadHeights[i-1]; y < golCumulativeThreadHeights[i]; y++ {
+				for x := 0; x < p.imageWidth; x++ {
+					golWorkerChans[i] <- world[y][x]
 				}
 			}
 		}
+
+		/*
+			for y := 0; y < p.imageWidth/p.threads; y++ {
+				for x := 0; x < p.imageWidth; x++ {
+					for i := range golWorkerChans {
+						golWorkerChans[i] <- world[y+(i*p.imageHeight/p.threads)][x]
+					}
+				}
+			}
+
+		*/
 		//Lower halo
 		for x := 0; x < p.imageWidth; x++ {
 			for i := range golWorkerChans {
-				golWorkerChans[i] <- world[(i+1)*(p.imageHeight/p.threads)%p.imageHeight][x]
+				golWorkerChans[i] <- world[golCumulativeThreadHeights[i]%p.imageHeight][x]
 			}
 		}
 
@@ -210,11 +224,29 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			golHalos[i] = <-golResultChans[i]
 			golNonHalos[i] = removeHalo(golHalos[i])
 			//Passing threads without halo to new world
-			for y := 0; y < p.imageHeight/p.threads; y++ {
-				for x := 0; x < p.imageWidth; x++ {
-					newWorld[y+(p.imageWidth/p.threads*i)][x] = golNonHalos[i][y][x]
+			if i == 0 {
+				for y := 0; y < golThreadHeights[0]; y++ {
+					for x := 0; x < p.imageWidth; x++ {
+						newWorld[y][x] = golNonHalos[i][y][x]
+					}
+				}
+			} else {
+				h := 0
+				for y := golCumulativeThreadHeights[i-1]; y < golCumulativeThreadHeights[i]; y++ {
+					for x := 0; x < p.imageWidth; x++ {
+						newWorld[y][x] = golNonHalos[i][h][x]
+					}
+					h++
 				}
 			}
+			/*
+				for y := 0; y < p.imageHeight/p.threads; y++ {
+					for x := 0; x < p.imageWidth; x++ {
+						newWorld[y+(p.imageWidth/p.threads*i)][x] = golNonHalos[i][y][x]
+					}
+				}
+
+			*/
 		}
 		//Updating the world with new world
 		for y := 0; y < p.imageHeight; y++ {

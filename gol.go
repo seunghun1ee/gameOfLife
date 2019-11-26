@@ -157,25 +157,24 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		fmt.Printf("Thread %d has  cumulative height %d\n", i, golCumulativeThreadHeights[i])
 	}
 
+	//Init slices of channels and slices of threads
+	//Slice of threads after gol logic with halo
+	golHalos := make([][][]byte, p.threads)
+	//Slice of threads after removing halo
+	golNonHalos := make([][][]byte, p.threads)
+	//Slice of channel of workers before gol logic
+	golWorkerChans := make([]chan byte, p.threads)
+	//Slice of channel of workers after gol logic
+	golResultChans := make([]chan [][]byte, p.threads)
+	for i := range golResultChans {
+		golResultChans[i] = make(chan [][]byte, golThreadHeights[i]+2)
+	}
+	for i := range golWorkerChans {
+		golWorkerChans[i] = make(chan byte)
+	}
+
 	// Calculate the new state of Game of Life after the given number of turns.
 	for turns := 0; turns < p.turns; turns++ {
-
-		//Init slices of channels and slices of threads
-
-		//Slice of threads after gol logic with halo
-		golHalos := make([][][]byte, p.threads)
-		//Slice of threads after removing halo
-		golNonHalos := make([][][]byte, p.threads)
-		//Slice of channel of workers before gol logic
-		golWorkerChans := make([]chan byte, p.threads)
-		//Slice of channel of workers after gol logic
-		golResultChans := make([]chan [][]byte, p.threads)
-		for i := range golResultChans {
-			golResultChans[i] = make(chan [][]byte, golThreadHeights[i]+2)
-		}
-		for i := range golWorkerChans {
-			golWorkerChans[i] = make(chan byte)
-		}
 
 		//Go routine starts here
 		for i := range golWorkerChans {

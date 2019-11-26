@@ -147,6 +147,12 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 
 	// Calculate the new state of Game of Life after the given number of turns.
 	for turns := 0; turns < p.turns; turns++ {
+		//Calculating thread height
+		golThreadHeights := calculateThreadHeight(p)
+		for a := range golThreadHeights {
+			fmt.Printf("Thread %d has height %d\n", a, golThreadHeights[a])
+		}
+
 		//Init slices of channels and slices of threads
 
 		//Slice of threads after gol logic with halo
@@ -158,16 +164,10 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		//Slice of channel of workers after gol logic
 		golResultChans := make([]chan [][]byte, p.threads)
 		for i := range golResultChans {
-			golResultChans[i] = make(chan [][]byte, p.imageHeight/p.threads+2)
+			golResultChans[i] = make(chan [][]byte, golThreadHeights[i]+2)
 		}
 		for i := range golWorkerChans {
 			golWorkerChans[i] = make(chan byte)
-		}
-
-		//Calculating thread height
-		golThreadHeights := calculateThreadHeight(p)
-		for a := range golThreadHeights {
-			fmt.Printf("Thread %d has height %d\n", a, golThreadHeights[a])
 		}
 
 		//Go routine starts here
@@ -196,6 +196,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			}
 		}
 
+		//Remove halo
 		for i := range golResultChans {
 			golHalos[i] = <-golResultChans[i]
 			golNonHalos[i] = removeHalo(golHalos[i])
@@ -206,12 +207,16 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 				}
 			}
 		}
-
+		//Updating the world
 		for y := 0; y < p.imageHeight; y++ {
 			for x := 0; x < p.imageWidth; x++ {
 				world[y][x] = newWorld[y][x]
 			}
 		}
+
+		//Keyboard input section
+		//r: input signal from rune channel
+		//t: 2 seconds time signal from bool channel
 		select {
 		case r := <-d.io.keyChan:
 			if r == 's' {
@@ -241,6 +246,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		default:
 
 		}
+		//Keyboard input section end
 
 	}
 

@@ -21,9 +21,10 @@ func calculateThreadHeight(p golParams) []int {
 		heightSlice[i] = p.imageHeight / p.threads
 	}
 	if leftover != 0 {
-		for j := 0; leftover > 0 && j < p.threads; j++ {
+		for j := 0; leftover > 0 && j < p.threads; {
 			heightSlice[j]++
 			leftover--
+			j = (j + 1) % p.threads
 		}
 	}
 	return heightSlice
@@ -144,14 +145,13 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			}
 		}
 	}
-
+	//Calculating thread height
+	golThreadHeights := calculateThreadHeight(p)
+	for a := range golThreadHeights {
+		fmt.Printf("Thread %d has height %d\n", a, golThreadHeights[a])
+	}
 	// Calculate the new state of Game of Life after the given number of turns.
 	for turns := 0; turns < p.turns; turns++ {
-		//Calculating thread height
-		golThreadHeights := calculateThreadHeight(p)
-		for a := range golThreadHeights {
-			fmt.Printf("Thread %d has height %d\n", a, golThreadHeights[a])
-		}
 
 		//Init slices of channels and slices of threads
 

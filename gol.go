@@ -202,16 +202,6 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			}
 		}
 
-		/*
-			for y := 0; y < p.imageWidth/p.threads; y++ {
-				for x := 0; x < p.imageWidth; x++ {
-					for i := range golWorkerChans {
-						golWorkerChans[i] <- world[y+(i*p.imageHeight/p.threads)][x]
-					}
-				}
-			}
-
-		*/
 		//Lower halo
 		for x := 0; x < p.imageWidth; x++ {
 			for i := range golWorkerChans {
@@ -239,14 +229,6 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 					h++
 				}
 			}
-			/*
-				for y := 0; y < p.imageHeight/p.threads; y++ {
-					for x := 0; x < p.imageWidth; x++ {
-						newWorld[y+(p.imageWidth/p.threads*i)][x] = golNonHalos[i][y][x]
-					}
-				}
-
-			*/
 		}
 		//Updating the world with new world
 		for y := 0; y < p.imageHeight; y++ {

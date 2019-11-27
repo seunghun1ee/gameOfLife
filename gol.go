@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+//1b
 func allocateSlice(height int, width int) [][]byte {
 	slice := make([][]byte, height)
 	for i := range slice {

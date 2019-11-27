@@ -11,7 +11,7 @@ type worker struct {
 	upperGet  <-chan byte
 	lowerSend chan<- byte
 	lowerGet  <-chan byte
-	signal    chan bool
+	//signal    chan bool
 }
 
 func allocateSlice(height int, width int) [][]byte {
@@ -158,13 +158,18 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 	for i := range golWorkerHaloExchanges {
 		golWorkerHaloExchanges[i] = make(chan byte)
 	}
-	/*
-		workers := make([]worker, p.threads)
-		for i := 0; i < p.threads; i++ {
-			workers[i] := worker{upperSend:golWorkerHaloExchanges[i],upperGet:golWorkerHaloExchanges[i + p.threads],lowerSend:}
-		}
-
-	*/
+	workers := make([]worker, p.threads)
+	for i := 0; i < p.threads; i++ {
+		//worker[0] to worker[3]: Senders
+		//worker[4] to worker[7]: Getters
+		//w(i).upperGet = w(i - 1).lowerSend
+		//w(i).lowerGet = w(i + 1).upperSend
+		workers[i] = worker{
+			upperSend: golWorkerHaloExchanges[i],
+			upperGet:  golWorkerHaloExchanges[i+p.threads],
+			lowerSend: golWorkerHaloExchanges[i+1],
+			lowerGet:  golWorkerHaloExchanges[i-1+p.threads]}
+	}
 
 	//Calculating thread height
 	golThreadHeights := calculateThreadHeight(p)

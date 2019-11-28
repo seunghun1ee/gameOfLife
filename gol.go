@@ -6,12 +6,35 @@ import (
 	"strings"
 )
 
+type worker struct {
+	upperSend chan<- byte
+	upperGet  <-chan byte
+	lowerSend chan<- byte
+	lowerGet  <-chan byte
+	//signal    chan bool
+}
+
 func allocateSlice(height int, width int) [][]byte {
 	slice := make([][]byte, height)
 	for i := range slice {
 		slice[i] = make([]byte, width)
 	}
 	return slice
+}
+
+func calculateThreadHeight(p golParams) []int {
+	heightSlice := make([]int, p.threads)
+	leftover := p.imageHeight % p.threads
+	for i := range heightSlice {
+		heightSlice[i] = p.imageHeight / p.threads
+	}
+	if leftover != 0 {
+		for j := 0; leftover > 0 && j < p.threads; leftover-- {
+			heightSlice[j]++
+			j = (j + 1) % p.threads
+		}
+	}
+	return heightSlice
 }
 
 func golLogic(start [][]byte) [][]byte {
@@ -52,9 +75,31 @@ func golLogic(start [][]byte) [][]byte {
 	}
 	return result
 }
+func outputBoard(p golParams, d distributorChans, world [][]byte, turn int) {
+	d.io.command <- ioOutput
+	d.io.filename <- strings.Join([]string{strconv.Itoa(p.imageWidth), strconv.Itoa(p.imageHeight), strconv.Itoa(turn)}, "x")
+	for y := 0; y < p.imageHeight; y++ {
+		for x := 0; x < p.imageWidth; x++ {
+			d.io.outputVal <- world[y][x]
+		}
+	}
+}
+func countAlive(p golParams, world [][]byte) []cell {
+	// Create an empty slice to store coordinates of cells that are still alive after p.turns are done.
+	var finalAlive []cell
+	// Go through the world and append the cells that are still alive.
+	for y := 0; y < p.imageHeight; y++ {
+		for x := 0; x < p.imageWidth; x++ {
+			if world[y][x] != 0 {
+				finalAlive = append(finalAlive, cell{x: x, y: y})
+			}
+		}
+	}
+	return finalAlive
+}
 
-func worker(p golParams, cellChan <-chan byte, out chan<- [][]byte) {
-	height := p.imageHeight/p.threads + 2
+func golWorker(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInfo int) {
+	height := heightInfo + 2
 	width := p.imageWidth
 
 	//Makes thread with incoming cells
@@ -108,81 +153,154 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		}
 	}
 
+	//Initialise halo channels
+	golWorkerHaloExchanges := make([]chan byte, 2*p.threads)
+	for i := range golWorkerHaloExchanges {
+		golWorkerHaloExchanges[i] = make(chan byte)
+	}
+	workers := make([]worker, p.threads)
+	for i := 0; i < p.threads; i++ {
+		//worker[0] to worker[3]: Senders
+		//worker[4] to worker[7]: Getters
+		//w(i).upperGet = w(i - 1).lowerSend
+		//w(i).lowerGet = w(i + 1).upperSend
+		workers[i] = worker{
+			upperSend: golWorkerHaloExchanges[i],
+			upperGet:  golWorkerHaloExchanges[i+p.threads],
+			lowerSend: golWorkerHaloExchanges[i+1],
+			lowerGet:  golWorkerHaloExchanges[i-1+p.threads]}
+	}
+
+	//Calculating thread height
+	golThreadHeights := calculateThreadHeight(p)
+	for a := range golThreadHeights {
+		fmt.Printf("Thread %d has height %d\n", a, golThreadHeights[a])
+	}
+	golCumulativeThreadHeights := make([]int, p.threads)
+	golCumulativeThreadHeights[0] = golThreadHeights[0]
+	fmt.Printf("Thread %d has  cumulative height %d\n", 0, golCumulativeThreadHeights[0])
+	for i := 1; i < len(golCumulativeThreadHeights); i++ {
+		golCumulativeThreadHeights[i] = golCumulativeThreadHeights[i-1] + golThreadHeights[i]
+		fmt.Printf("Thread %d has  cumulative height %d\n", i, golCumulativeThreadHeights[i])
+	}
+
+	//Init slices of channels and slices of threads
+	//Slice of threads after gol logic with halo
+	golHalos := make([][][]byte, p.threads)
+	//Slice of threads after removing halo
+	golNonHalos := make([][][]byte, p.threads)
+	//Slice of channel of workers before gol logic
+	golWorkerChans := make([]chan byte, p.threads)
+	//Slice of channel of workers after gol logic
+	golResultChans := make([]chan [][]byte, p.threads)
+	for i := range golResultChans {
+		golResultChans[i] = make(chan [][]byte, golThreadHeights[i]+2)
+	}
+	for i := range golWorkerChans {
+		golWorkerChans[i] = make(chan byte)
+	}
+
 	// Calculate the new state of Game of Life after the given number of turns.
 	for turns := 0; turns < p.turns; turns++ {
-		//Init slices of channels and slices of threads
-		golHalos := make([][][]byte, p.threads)
-		golNonHalos := make([][][]byte, p.threads)
-		golWorkerChans := make([]chan byte, p.threads)
-		golResultChans := make([]chan [][]byte, p.threads)
-		for i := range golResultChans {
-			golResultChans[i] = make(chan [][]byte, p.imageHeight/p.threads+2)
-		}
-		for i := range golWorkerChans {
-			golWorkerChans[i] = make(chan byte)
-		}
+
 		//Go routine starts here
 		for i := range golWorkerChans {
-			go worker(p, golWorkerChans[i], golResultChans[i])
+			go golWorker(p, golWorkerChans[i], golResultChans[i], golThreadHeights[i])
 		}
 
 		//Upper halo
 		for x := 0; x < p.imageWidth; x++ {
 			for i := range golWorkerChans {
-				golWorkerChans[i] <- world[(i*(p.imageHeight/p.threads)-1+p.imageHeight)%p.imageHeight][x]
+				golWorkerChans[i] <- world[golCumulativeThreadHeights[((i-1)+p.threads)%p.threads]-1][x]
 			}
 		}
 		//mid
-		for y := 0; y < p.imageWidth/p.threads; y++ {
+		for y := 0; y < golCumulativeThreadHeights[0]; y++ {
 			for x := 0; x < p.imageWidth; x++ {
-				for i := range golWorkerChans {
-					golWorkerChans[i] <- world[y+(i*p.imageHeight/p.threads)][x]
+				golWorkerChans[0] <- world[y][x]
+			}
+		}
+		for i := 1; i < p.threads; i++ {
+			for y := golCumulativeThreadHeights[i-1]; y < golCumulativeThreadHeights[i]; y++ {
+				for x := 0; x < p.imageWidth; x++ {
+					golWorkerChans[i] <- world[y][x]
 				}
 			}
 		}
+
 		//Lower halo
 		for x := 0; x < p.imageWidth; x++ {
 			for i := range golWorkerChans {
-				golWorkerChans[i] <- world[(i+1)*(p.imageHeight/p.threads)%p.imageHeight][x]
+				golWorkerChans[i] <- world[golCumulativeThreadHeights[i]%p.imageHeight][x]
 			}
 		}
 
+		//Remove halo
 		for i := range golResultChans {
 			golHalos[i] = <-golResultChans[i]
 			golNonHalos[i] = removeHalo(golHalos[i])
-
-			for y := 0; y < p.imageHeight/p.threads; y++ {
-				for x := 0; x < p.imageWidth; x++ {
-					newWorld[y+(p.imageWidth/p.threads*i)][x] = golNonHalos[i][y][x]
+			//Passing threads without halo to new world
+			if i == 0 {
+				for y := 0; y < golThreadHeights[0]; y++ {
+					for x := 0; x < p.imageWidth; x++ {
+						newWorld[y][x] = golNonHalos[i][y][x]
+					}
+				}
+			} else {
+				h := 0
+				for y := golCumulativeThreadHeights[i-1]; y < golCumulativeThreadHeights[i]; y++ {
+					for x := 0; x < p.imageWidth; x++ {
+						newWorld[y][x] = golNonHalos[i][h][x]
+					}
+					h++
 				}
 			}
 		}
-
+		//Updating the world with new world
 		for y := 0; y < p.imageHeight; y++ {
 			for x := 0; x < p.imageWidth; x++ {
 				world[y][x] = newWorld[y][x]
 			}
 		}
-	}
 
-	// Create an empty slice to store coordinates of cells that are still alive after p.turns are done.
-	var finalAlive []cell
-	// Go through the world and append the cells that are still alive.
-	for y := 0; y < p.imageHeight; y++ {
-		for x := 0; x < p.imageWidth; x++ {
-			if world[y][x] != 0 {
-				finalAlive = append(finalAlive, cell{x: x, y: y})
+		//Keyboard input section
+		//r: input signal from rune channel
+		//t: 2 seconds time signal from bool channel
+		select {
+		case r := <-d.io.keyChan:
+			if r == 's' {
+				outputBoard(p, d, world, turns)
 			}
+			if r == 'p' {
+				fmt.Println("Execution Paused")
+
+				for x := true; x == true; {
+					select {
+					case pauseInput := <-d.io.keyChan:
+						if pauseInput == 'p' {
+							x = false
+							fmt.Println("Continuing")
+						}
+					}
+				}
+			}
+			if r == 'q' {
+				p.turns = turns
+			}
+		case t := <-d.io.timeChan:
+			if t {
+				fmt.Println(len(countAlive(p, world)))
+
+			}
+		default:
+
 		}
+		//Keyboard input section end
+
 	}
 
-	d.io.command <- ioOutput
-	d.io.filename <- strings.Join([]string{strconv.Itoa(p.imageWidth), strconv.Itoa(p.imageHeight), strconv.Itoa(p.turns)}, "x")
-	for y := 0; y < p.imageHeight; y++ {
-		for x := 0; x < p.imageWidth; x++ {
-			d.io.outputVal <- world[y][x]
-		}
-	}
+	finalAlive := countAlive(p, world)
+	outputBoard(p, d, world, p.turns)
 
 	// Make sure that the Io has finished any output before exiting.
 	d.io.command <- ioCheckIdle

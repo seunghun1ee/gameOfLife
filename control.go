@@ -1,7 +1,8 @@
-package main //Onions
+package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/nsf/termbox-go"
 )
@@ -21,11 +22,17 @@ func getKeyboardCommand(key chan<- rune) {
 	}
 }
 
+func timerControl(timeChan chan bool) {
+	for {
+		time.Sleep(2 * time.Second)
+		timeChan <- true
+	}
+}
+
 // startControlServer initialises termbox and prints basic information about the game configuration.
 func startControlServer(p golParams) {
 	e := termbox.Init()
 	check(e)
-
 	fmt.Println("Threads:", p.threads)
 	fmt.Println("Width:", p.imageWidth)
 	fmt.Println("Height:", p.imageHeight)

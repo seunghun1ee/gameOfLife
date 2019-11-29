@@ -178,13 +178,20 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 				outputBoard(p, d, world, turns)
 			}
 			if r == 'p' {
-				fmt.Println("Execution Paused")
+				fmt.Printf("Execution Paused at turn %d\n", turns)
 				for x := true; x == true; {
 					select {
 					case pauseInput := <-d.io.keyChan:
+						if pauseInput == 's' {
+							outputBoard(p, d, world, turns)
+						}
 						if pauseInput == 'p' {
 							x = false
 							fmt.Println("Continuing")
+						}
+						if pauseInput == 'q' {
+							p.turns = turns
+							x = false
 						}
 					}
 				}

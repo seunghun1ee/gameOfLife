@@ -212,7 +212,11 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			if r == 'q' {
 				p.turns = turns
 			}
+		case t := <-d.io.timeChan:
+			if t {
+				fmt.Println(len(countAlive(p, world)))
 
+			}
 		default:
 
 		}

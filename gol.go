@@ -11,7 +11,7 @@ type worker struct {
 	upperGet  <-chan byte
 	lowerSend chan<- byte
 	lowerGet  <-chan byte
-	//signal    chan bool
+	signal    chan bool
 }
 
 func allocateSlice(height int, width int) [][]byte {
@@ -134,7 +134,10 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 	newWorld := make([][]byte, p.imageHeight)
 	for i := range world {
 		world[i] = make([]byte, p.imageWidth)
-		newWorld[i] = make([]byte, p.imageWidth)
+		if p.turns != 0 {
+			newWorld[i] = make([]byte, p.imageWidth)
+		}
+
 	}
 
 	// Request the io goroutine to read in the image with the given filename.
@@ -148,13 +151,16 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			if val != 0 {
 				fmt.Println("Alive cell at", x, y)
 				world[y][x] = val
-				newWorld[y][x] = val
 			}
 		}
 	}
 
 	//Initialise halo channels
 	golWorkerHaloExchanges := make([]chan byte, 2*p.threads)
+	golWorkerSignals := make([]chan bool, p.threads)
+	for i := range golWorkerSignals {
+		golWorkerSignals[i] = make(chan bool)
+	}
 	for i := range golWorkerHaloExchanges {
 		golWorkerHaloExchanges[i] = make(chan byte)
 	}
@@ -168,20 +174,16 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			upperSend: golWorkerHaloExchanges[i],
 			upperGet:  golWorkerHaloExchanges[i+p.threads],
 			lowerSend: golWorkerHaloExchanges[i+1],
-			lowerGet:  golWorkerHaloExchanges[i-1+p.threads]}
+			lowerGet:  golWorkerHaloExchanges[i-1+p.threads],
+			signal:    golWorkerSignals[i]}
 	}
 
 	//Calculating thread height
 	golThreadHeights := calculateThreadHeight(p)
-	for a := range golThreadHeights {
-		fmt.Printf("Thread %d has height %d\n", a, golThreadHeights[a])
-	}
 	golCumulativeThreadHeights := make([]int, p.threads)
 	golCumulativeThreadHeights[0] = golThreadHeights[0]
-	fmt.Printf("Thread %d has  cumulative height %d\n", 0, golCumulativeThreadHeights[0])
 	for i := 1; i < len(golCumulativeThreadHeights); i++ {
 		golCumulativeThreadHeights[i] = golCumulativeThreadHeights[i-1] + golThreadHeights[i]
-		fmt.Printf("Thread %d has  cumulative height %d\n", i, golCumulativeThreadHeights[i])
 	}
 
 	//Init slices of channels and slices of threads

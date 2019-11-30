@@ -134,6 +134,7 @@ func golWorker2A(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightI
 	out <- threadWorld
 }
 
+//aaa
 func golWorker2B(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInfo int, workers []worker, workerNumber int) {
 	height := heightInfo + 2
 	width := p.imageWidth

@@ -7,11 +7,8 @@ import (
 )
 
 type worker struct {
-	upperSend chan<- byte
-	upperGet  <-chan byte
-	lowerSend chan<- byte
-	lowerGet  <-chan byte
-	signal    chan bool
+	upper chan byte
+	lower chan byte
 }
 
 func allocateSlice(height int, width int) [][]byte {
@@ -113,6 +110,55 @@ func golWorker(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInf
 	out <- golLogic(start)
 }
 
+/*
+func haloExchange(p golParams, thread [][]byte, in <-chan byte, out chan<- byte) [][]byte{
+	temp := make([]byte, p.imageWidth)
+	for
+
+}
+
+*/
+
+func golWorker2A(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInfo int, workers []worker, workerNumber int) {
+	height := heightInfo + 2
+	width := p.imageWidth
+	aboveWorker := workers[(workerNumber-1+p.threads)%p.threads]
+
+	//Makes thread with incoming cells
+	threadWorld := allocateSlice(height, width)
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			cell := <-cellChan
+			threadWorld[y][x] = cell
+		}
+	}
+	for x := 0; x < p.imageWidth; x++ {
+		aboveWorker.upper <- threadWorld[1][x]
+	}
+
+	out <- threadWorld
+}
+
+func golWorker2B(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInfo int, workers []worker, workerNumber int) {
+	height := heightInfo + 2
+	width := p.imageWidth
+	belowWorker := workers[(workerNumber+1)%p.threads]
+
+	//Makes thread with incoming cells
+	threadWorld := allocateSlice(height, width)
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			cell := <-cellChan
+			threadWorld[y][x] = cell
+		}
+	}
+	for x := 0; x < p.imageWidth; x++ {
+		threadWorld[0][x] = <-belowWorker.upper
+	}
+
+	out <- threadWorld
+}
+
 func removeHalo(input [][]byte) [][]byte {
 	height := len(input) - 2
 	width := len(input[0])
@@ -154,61 +200,58 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			}
 		}
 	}
+	fmt.Println("world init done")
 
-	//Initialise halo channels
-	golWorkerHaloExchanges := make([]chan byte, 2*p.threads)
-	golWorkerSignals := make([]chan bool, p.threads)
-	for i := range golWorkerSignals {
-		golWorkerSignals[i] = make(chan bool)
-	}
-	for i := range golWorkerHaloExchanges {
-		golWorkerHaloExchanges[i] = make(chan byte)
-	}
-	workers := make([]worker, p.threads)
-	for i := 0; i < p.threads; i++ {
-		//worker[0] to worker[3]: Senders
-		//worker[4] to worker[7]: Getters
-		//w(i).upperGet = w(i - 1).lowerSend
-		//w(i).lowerGet = w(i + 1).upperSend
-		workers[i] = worker{
-			upperSend: golWorkerHaloExchanges[i],
-			upperGet:  golWorkerHaloExchanges[i+p.threads],
-			lowerSend: golWorkerHaloExchanges[i+1],
-			lowerGet:  golWorkerHaloExchanges[i-1+p.threads],
-			signal:    golWorkerSignals[i]}
-	}
+	if p.turns != 0 {
 
-	//Calculating thread height
-	golThreadHeights := calculateThreadHeight(p)
-	golCumulativeThreadHeights := make([]int, p.threads)
-	golCumulativeThreadHeights[0] = golThreadHeights[0]
-	for i := 1; i < len(golCumulativeThreadHeights); i++ {
-		golCumulativeThreadHeights[i] = golCumulativeThreadHeights[i-1] + golThreadHeights[i]
-	}
+		//Initialise halo channels
+		haloExchanges := make([]chan byte, p.threads)
+		for i := 0; i < p.threads; i++ {
+			haloExchanges[i] = make(chan byte)
+		}
+		fmt.Println("signals init")
+		fmt.Println("halo exchange init")
+		workers := make([]worker, p.threads)
+		for i := 0; i < p.threads; i++ {
+			//w(i).upperGet = w(i - 1).lowerSend
+			//w(i).lowerGet = w(i + 1).upperSend
+			workers[i] = worker{
+				upper: upperHaloExchanges[i],
+				lower: lowerHaloExchanges[i]}
+		}
+		fmt.Println("workers init")
 
-	//Init slices of channels and slices of threads
-	//Slice of threads after gol logic with halo
-	golHalos := make([][][]byte, p.threads)
-	//Slice of threads after removing halo
-	golNonHalos := make([][][]byte, p.threads)
-	//Slice of channel of workers before gol logic
-	golWorkerChans := make([]chan byte, p.threads)
-	//Slice of channel of workers after gol logic
-	golResultChans := make([]chan [][]byte, p.threads)
-	for i := range golResultChans {
-		golResultChans[i] = make(chan [][]byte, golThreadHeights[i]+2)
-	}
-	for i := range golWorkerChans {
-		golWorkerChans[i] = make(chan byte)
-	}
+		//Calculating thread height
+		golThreadHeights := calculateThreadHeight(p)
+		golCumulativeThreadHeights := make([]int, p.threads)
+		golCumulativeThreadHeights[0] = golThreadHeights[0]
+		for i := 1; i < len(golCumulativeThreadHeights); i++ {
+			golCumulativeThreadHeights[i] = golCumulativeThreadHeights[i-1] + golThreadHeights[i]
+		}
+		fmt.Println("thread height calculated")
 
-	// Calculate the new state of Game of Life after the given number of turns.
-	for turns := 0; turns < p.turns; turns++ {
+		//Init slices of channels and slices of threads
+		//Slice of threads after gol logic with halo
+		golHalos := make([][][]byte, p.threads)
+		//Slice of threads after removing halo
+		golNonHalos := make([][][]byte, p.threads)
+		//Slice of channel of workers before gol logic
+		golWorkerChans := make([]chan byte, p.threads)
+		//Slice of channel of workers after gol logic
+		golResultChans := make([]chan [][]byte, p.threads)
+		for i := range golResultChans {
+			golResultChans[i] = make(chan [][]byte, golThreadHeights[i]+2)
+		}
+		for i := range golWorkerChans {
+			golWorkerChans[i] = make(chan byte)
+		}
+		fmt.Println("workerchan resultchan init")
 
 		//Go routine starts here
 		for i := range golWorkerChans {
 			go golWorker(p, golWorkerChans[i], golResultChans[i], golThreadHeights[i])
 		}
+		fmt.Println("go routines all started")
 
 		//Upper halo
 		for x := 0; x < p.imageWidth; x++ {
@@ -216,6 +259,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 				golWorkerChans[i] <- world[golCumulativeThreadHeights[((i-1)+p.threads)%p.threads]-1][x]
 			}
 		}
+		fmt.Println("upper sent")
 		//mid
 		for y := 0; y < golCumulativeThreadHeights[0]; y++ {
 			for x := 0; x < p.imageWidth; x++ {
@@ -229,6 +273,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 				}
 			}
 		}
+		fmt.Println("mid sent")
 
 		//Lower halo
 		for x := 0; x < p.imageWidth; x++ {
@@ -236,6 +281,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 				golWorkerChans[i] <- world[golCumulativeThreadHeights[i]%p.imageHeight][x]
 			}
 		}
+		fmt.Println("lower sent")
 
 		//Remove halo
 		for i := range golResultChans {
@@ -265,6 +311,11 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			}
 		}
 
+	}
+	fmt.Println("turn done")
+
+	// Calculate the new state of Game of Life after the given number of turns.
+	for turns := 0; turns < p.turns; turns++ {
 		//Keyboard input section
 		//r: input signal from rune channel
 		//t: 2 seconds time signal from bool channel

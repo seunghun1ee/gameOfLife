@@ -95,21 +95,6 @@ func countAlive(p golParams, world [][]byte) []cell {
 	return finalAlive
 }
 
-func golWorker(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInfo int) {
-	height := heightInfo + 2
-	width := p.imageWidth
-
-	//Makes thread with incoming cells
-	start := allocateSlice(height, width)
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			cell := <-cellChan
-			start[y][x] = cell
-		}
-	}
-	out <- golLogic(start)
-}
-
 /*
 func haloExchange(p golParams, thread [][]byte, in <-chan byte, out chan<- byte) [][]byte{
 	temp := make([]byte, p.imageWidth)
@@ -138,16 +123,8 @@ func golWorker2A(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightI
 	for turn := 0; turn < p.turns; turn++ {
 		for x := 0; x < p.imageWidth; x++ {
 			thisWorker.upper <- threadWorld[1][x]
-		}
-		for x := 0; x < p.imageWidth; x++ {
 			thisWorker.lower <- threadWorld[height-2][x]
-		}
-
-		for x := 0; x < p.imageWidth; x++ {
 			threadWorld[height-1][x] = <-belowWorker.upper
-		}
-
-		for x := 0; x < p.imageWidth; x++ {
 			threadWorld[0][x] = <-aboveWorker.lower
 		}
 
@@ -175,16 +152,8 @@ func golWorker2B(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightI
 	for turn := 0; turn < p.turns; turn++ {
 		for x := 0; x < p.imageWidth; x++ {
 			threadWorld[height-1][x] = <-belowWorker.upper
-		}
-		for x := 0; x < p.imageWidth; x++ {
 			threadWorld[0][x] = <-aboveWorker.lower
-		}
-
-		for x := 0; x < p.imageWidth; x++ {
 			thisWorker.upper <- threadWorld[1][x]
-		}
-
-		for x := 0; x < p.imageWidth; x++ {
 			thisWorker.lower <- threadWorld[height-2][x]
 		}
 
@@ -235,7 +204,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			}
 		}
 	}
-	fmt.Println("world init done")
+	//fmt.Println("world init done")
 
 	if p.turns != 0 {
 
@@ -252,7 +221,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		for i := 1; i < len(golCumulativeThreadHeights); i++ {
 			golCumulativeThreadHeights[i] = golCumulativeThreadHeights[i-1] + golThreadHeights[i]
 		}
-		fmt.Println("thread height calculated")
+		//fmt.Println("thread height calculated")
 
 		//Initialise halo channels
 		aboveHaloExchanges := make([]chan byte, p.threads)
@@ -261,8 +230,8 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 			aboveHaloExchanges[i] = make(chan byte)
 			belowHaloExchanges[i] = make(chan byte)
 		}
-		fmt.Println("signals init")
-		fmt.Println("halo exchange init")
+		//fmt.Println("signals init")
+		//fmt.Println("halo exchange init")
 		workers := make([]worker, p.threads)
 		for i := 0; i < p.threads; i++ {
 			//w(i).upperGet = w(i - 1).lowerSend
@@ -271,7 +240,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 				upper: aboveHaloExchanges[i],
 				lower: belowHaloExchanges[i]}
 		}
-		fmt.Println("workers init")
+		//fmt.Println("workers init")
 
 		//Init slices of channels and slices of threads
 		//Slice of threads after gol logic with halo
@@ -288,7 +257,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		for i := range golWorkerChans {
 			golWorkerChans[i] = make(chan byte)
 		}
-		fmt.Println("workerchan resultchan init")
+		//fmt.Println("workerchan resultchan init")
 
 		//Go routine starts here
 		for i := range golWorkerChans {
@@ -298,7 +267,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 				go golWorker2B(p, golWorkerChans[i], golResultChans[i], golThreadHeights[i], workers, i)
 			}
 		}
-		fmt.Println("go routines all started")
+		//fmt.Println("go routines all started")
 
 		//Upper halo
 		for x := 0; x < p.imageWidth; x++ {
@@ -306,7 +275,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 				golWorkerChans[i] <- world[golCumulativeThreadHeights[((i-1)+p.threads)%p.threads]-1][x]
 			}
 		}
-		fmt.Println("upper sent")
+		//fmt.Println("upper sent")
 		//mid
 		for y := 0; y < golCumulativeThreadHeights[0]; y++ {
 			for x := 0; x < p.imageWidth; x++ {
@@ -320,7 +289,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 				}
 			}
 		}
-		fmt.Println("mid sent")
+		//fmt.Println("mid sent")
 
 		//Lower halo
 		for x := 0; x < p.imageWidth; x++ {
@@ -328,7 +297,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 				golWorkerChans[i] <- world[golCumulativeThreadHeights[i]%p.imageHeight][x]
 			}
 		}
-		fmt.Println("lower sent")
+		//fmt.Println("lower sent")
 
 		//Remove halo
 		for i := range golResultChans {
@@ -359,7 +328,7 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		}
 
 	}
-	fmt.Println("turn done")
+	//fmt.Println("turn done")
 
 	// Calculate the new state of Game of Life after the given number of turns.
 	for turns := 0; turns < p.turns; turns++ {

@@ -327,12 +327,9 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 
 		//Go routine starts here
 		//Starting threads
-		for i := range golWorkerChans {
-			if i%2 == 0 {
-				go golWorkerA(p, golWorkerChans[i], golResultChans[i], golThreadHeights[i], workers, i)
-			} else {
-				go golWorkerB(p, golWorkerChans[i], golResultChans[i], golThreadHeights[i], workers, i)
-			}
+		for i := 0; i < len(golWorkerChans); i += 2 {
+			go golWorkerA(p, golWorkerChans[i], golResultChans[i], golThreadHeights[i], workers, i)
+			go golWorkerB(p, golWorkerChans[i+1], golResultChans[i+1], golThreadHeights[i+1], workers, i+1)
 		}
 
 		//send the split of the world to threads

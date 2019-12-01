@@ -50,8 +50,19 @@ func golLogic(start [][]byte) [][]byte {
 			//counts neighbors
 			for i := 0; i < 3; i++ {
 				for j := 0; j < 3; j++ {
-					if start[y-1+i][(x-1+j+width)%width] == 0xFF {
-						count++
+					if x-1+j < 0 {
+						if start[y-1+i][width-1] == 0xFF {
+							count++
+						}
+					} else if x-1+j >= width {
+						if start[y-1+i][0] == 0xFF {
+							count++
+						}
+					} else {
+						if start[y-1+i][x-1+j] == 0xFF {
+							count++
+						}
+
 					}
 				}
 			}
@@ -107,7 +118,12 @@ func sendWorldToWorkers(p golParams, world [][]byte, golWorkerChans []chan byte,
 	//Upper halo
 	for x := 0; x < p.imageWidth; x++ {
 		for i := range golWorkerChans {
-			golWorkerChans[i] <- world[golCumulativeThreadHeights[((i-1)+p.threads)%p.threads]-1][x]
+			if i == 0 {
+				golWorkerChans[0] <- world[golCumulativeThreadHeights[p.threads-1]-1][x]
+			} else {
+				golWorkerChans[i] <- world[golCumulativeThreadHeights[i-1]-1][x]
+			}
+
 		}
 	}
 	//mid
@@ -127,7 +143,12 @@ func sendWorldToWorkers(p golParams, world [][]byte, golWorkerChans []chan byte,
 	//Lower halo
 	for x := 0; x < p.imageWidth; x++ {
 		for i := range golWorkerChans {
-			golWorkerChans[i] <- world[golCumulativeThreadHeights[i]%p.imageHeight][x]
+			if i == p.threads-1 {
+				golWorkerChans[i] <- world[0][x]
+			} else {
+				golWorkerChans[i] <- world[golCumulativeThreadHeights[i]][x]
+			}
+
 		}
 	}
 }

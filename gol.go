@@ -114,43 +114,36 @@ func countAlive(p golParams, world [][]byte) []cell {
 }
 
 //After go routines of threads are started, sends the split of the world including initial halos
-func sendWorldToWorkers(p golParams, world [][]byte, golWorkerChans []chan byte, golCumulativeThreadHeights []int) {
+func sendWorldToWorkers(p golParams, world [][]byte, golWorkerChans []chan []byte, golCumulativeThreadHeights []int) {
 	//Upper halo
-	for x := 0; x < p.imageWidth; x++ {
-		for i := range golWorkerChans {
-			if i == 0 {
-				golWorkerChans[0] <- world[golCumulativeThreadHeights[p.threads-1]-1][x]
-			} else {
-				golWorkerChans[i] <- world[golCumulativeThreadHeights[i-1]-1][x]
-			}
 
+	for i := range golWorkerChans {
+		if i == 0 {
+			golWorkerChans[0] <- world[golCumulativeThreadHeights[p.threads-1]-1]
+		} else {
+			golWorkerChans[i] <- world[golCumulativeThreadHeights[i-1]-1]
 		}
 	}
+
 	//mid
 	for y := 0; y < golCumulativeThreadHeights[0]; y++ {
-		for x := 0; x < p.imageWidth; x++ {
-			golWorkerChans[0] <- world[y][x]
-		}
+		golWorkerChans[0] <- world[y]
 	}
 	for i := 1; i < p.threads; i++ {
 		for y := golCumulativeThreadHeights[i-1]; y < golCumulativeThreadHeights[i]; y++ {
-			for x := 0; x < p.imageWidth; x++ {
-				golWorkerChans[i] <- world[y][x]
-			}
+			golWorkerChans[i] <- world[y]
 		}
 	}
 
 	//Lower halo
-	for x := 0; x < p.imageWidth; x++ {
-		for i := range golWorkerChans {
-			if i == p.threads-1 {
-				golWorkerChans[i] <- world[0][x]
-			} else {
-				golWorkerChans[i] <- world[golCumulativeThreadHeights[i]][x]
-			}
-
+	for i := range golWorkerChans {
+		if i == p.threads-1 {
+			golWorkerChans[i] <- world[0]
+		} else {
+			golWorkerChans[i] <- world[golCumulativeThreadHeights[i]]
 		}
 	}
+
 }
 
 func removeHaloAndMergeThreads(p golParams, golResultChans []chan [][]byte, golHalos [][][]byte, golNonHalos [][][]byte, golThreadHeights []int, golCumulativeThreadHeights []int) [][]byte {
@@ -181,20 +174,18 @@ func removeHaloAndMergeThreads(p golParams, golResultChans []chan [][]byte, golH
 }
 
 //When exchanging the halos, A type workers send the halo first
-func golWorkerA(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInfo int, workers []worker, workerNumber int) {
+func golWorkerA(p golParams, rowChan <-chan []byte, out chan<- [][]byte, heightInfo int, workers []worker, workerNumber int) {
 	height := heightInfo + 2
 	width := p.imageWidth
 	thisWorker := workers[workerNumber]
 	aboveWorker := workers[(workerNumber-1+p.threads)%p.threads]
 	belowWorker := workers[(workerNumber+1)%p.threads]
 
-	//Makes thread with incoming cells
+	//Makes thread with incoming rows
 	threadWorld := allocateSlice(height, width)
 	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			cell := <-cellChan
-			threadWorld[y][x] = cell
-		}
+		row := <-rowChan
+		threadWorld[y] = row
 	}
 	//Applying golLogic for every turn
 	for turn := 0; turn < p.turns; turn++ {
@@ -211,20 +202,18 @@ func golWorkerA(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightIn
 }
 
 //When exchanging the halos, B type workers receives the halo first
-func golWorkerB(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInfo int, workers []worker, workerNumber int) {
+func golWorkerB(p golParams, rowChan <-chan []byte, out chan<- [][]byte, heightInfo int, workers []worker, workerNumber int) {
 	height := heightInfo + 2
 	width := p.imageWidth
 	thisWorker := workers[workerNumber]
 	aboveWorker := workers[(workerNumber-1+p.threads)%p.threads]
 	belowWorker := workers[(workerNumber+1)%p.threads]
 
-	//Makes thread with incoming cells
+	//Makes thread with incoming rows
 	threadWorld := allocateSlice(height, width)
 	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			cell := <-cellChan
-			threadWorld[y][x] = cell
-		}
+		row := <-rowChan
+		threadWorld[y] = row
 	}
 	//Applying golLogic for every turn
 	for turn := 0; turn < p.turns; turn++ {
@@ -315,14 +304,14 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		//Slice of threads after removing halo
 		golNonHalos := make([][][]byte, p.threads)
 		//Slice of channel of workers before gol logic
-		golWorkerChans := make([]chan byte, p.threads)
+		golWorkerChans := make([]chan []byte, p.threads)
 		//Slice of channel of workers after gol logic
 		golResultChans := make([]chan [][]byte, p.threads)
 		for i := range golResultChans {
 			golResultChans[i] = make(chan [][]byte, golThreadHeights[i]+2)
 		}
 		for i := range golWorkerChans {
-			golWorkerChans[i] = make(chan byte)
+			golWorkerChans[i] = make(chan []byte)
 		}
 
 		//Go routine starts here

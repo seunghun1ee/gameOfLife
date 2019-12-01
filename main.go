@@ -132,7 +132,7 @@ func main() {
 
 	flag.Parse()
 
-	params.turns = 1000
+	params.turns = 10
 
 	startControlServer(params)
 	gameOfLife(params, keyChan, timeChan)

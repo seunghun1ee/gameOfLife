@@ -34,6 +34,118 @@ func calculateThreadHeight(p golParams) []int {
 	return heightSlice
 }
 
+func workerController(p golParams, d distributorChans, worldRef [][]byte, workerChans []chan rune, turnInfo chan int) {
+	//Keyboard input section
+	//r: input signal from rune channel
+	//t: 2 seconds time signal from bool channel
+controlLoop:
+	for {
+
+		select {
+		case r := <-d.io.keyChan:
+			if r == 's' {
+				for i := range workerChans {
+					workerChans[i] <- 's'
+				}
+				turns := <-turnInfo
+				outputBoard(p, d, worldRef, turns)
+			}
+			if r == 'p' {
+				turns := <-turnInfo
+				fmt.Printf("Execution Paused at turn %d\n", turns)
+				for x := true; x == true; {
+					select {
+					case pauseInput := <-d.io.keyChan:
+						if pauseInput == 's' {
+							outputBoard(p, d, worldRef, turns)
+						}
+						if pauseInput == 'p' {
+							x = false
+							fmt.Println("Continuing")
+						}
+						if pauseInput == 'q' {
+							p.turns = turns
+							x = false
+						}
+					}
+				}
+			}
+			if r == 'q' {
+				for i := range workerChans {
+					workerChans[i] <- 'q'
+				}
+				break controlLoop
+				//p.turns = turns
+			}
+		case t := <-d.io.timeChan:
+			if t {
+				fmt.Println(len(countAlive(p, worldRef)))
+
+			}
+		default:
+
+		}
+	}
+
+	//Keyboard input section end
+}
+
+func sendWorldToWorkers(p golParams, world [][]byte, golWorkerChans []chan byte, golCumulativeThreadHeights []int) {
+	//Upper halo
+	for x := 0; x < p.imageWidth; x++ {
+		for i := range golWorkerChans {
+			golWorkerChans[i] <- world[golCumulativeThreadHeights[((i-1)+p.threads)%p.threads]-1][x]
+		}
+	}
+	//mid
+	for y := 0; y < golCumulativeThreadHeights[0]; y++ {
+		for x := 0; x < p.imageWidth; x++ {
+			golWorkerChans[0] <- world[y][x]
+		}
+	}
+	for i := 1; i < p.threads; i++ {
+		for y := golCumulativeThreadHeights[i-1]; y < golCumulativeThreadHeights[i]; y++ {
+			for x := 0; x < p.imageWidth; x++ {
+				golWorkerChans[i] <- world[y][x]
+			}
+		}
+	}
+
+	//Lower halo
+	for x := 0; x < p.imageWidth; x++ {
+		for i := range golWorkerChans {
+			golWorkerChans[i] <- world[golCumulativeThreadHeights[i]%p.imageHeight][x]
+		}
+	}
+}
+
+func removeHaloAndMergeThreads(p golParams, golResultChans []chan [][]byte, golHalos [][][]byte, golNonHalos [][][]byte, golThreadHeights []int, golCumulativeThreadHeights []int) [][]byte {
+	newWorld := allocateSlice(p.imageHeight, p.imageWidth)
+
+	//Remove halo
+	for i := range golResultChans {
+		golHalos[i] = <-golResultChans[i]
+		golNonHalos[i] = removeHalo(golHalos[i])
+		//Passing threads without halo to new world
+		if i == 0 {
+			for y := 0; y < golThreadHeights[0]; y++ {
+				for x := 0; x < p.imageWidth; x++ {
+					newWorld[y][x] = golNonHalos[i][y][x]
+				}
+			}
+		} else {
+			h := 0
+			for y := golCumulativeThreadHeights[i-1]; y < golCumulativeThreadHeights[i]; y++ {
+				for x := 0; x < p.imageWidth; x++ {
+					newWorld[y][x] = golNonHalos[i][h][x]
+				}
+				h++
+			}
+		}
+	}
+	return newWorld
+}
+
 func golLogic(start [][]byte) [][]byte {
 	height := len(start)
 	width := len(start[0])
@@ -104,12 +216,13 @@ func haloExchange(p golParams, thread [][]byte, in <-chan byte, out chan<- byte)
 
 */
 
-func golWorker2A(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInfo int, workers []worker, workerNumber int) {
+func golWorker2A(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInfo int, workers []worker, workerNumber int, controlChan chan rune, turnInfo chan int) {
 	height := heightInfo + 2
 	width := p.imageWidth
 	thisWorker := workers[workerNumber]
 	aboveWorker := workers[(workerNumber-1+p.threads)%p.threads]
 	belowWorker := workers[(workerNumber+1)%p.threads]
+	turn := 0
 
 	//Makes thread with incoming cells
 	threadWorld := allocateSlice(height, width)
@@ -120,22 +233,32 @@ func golWorker2A(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightI
 		}
 	}
 
-	for turn := 0; turn < p.turns; turn++ {
+turnLoop:
+	for ; turn < p.turns; turn++ {
+
 		for x := 0; x < p.imageWidth; x++ {
 			thisWorker.upper <- threadWorld[1][x]
 			thisWorker.lower <- threadWorld[height-2][x]
 			threadWorld[height-1][x] = <-belowWorker.upper
 			threadWorld[0][x] = <-aboveWorker.lower
 		}
-
 		threadWorld = golLogic(threadWorld)
+		select {
+		case r := <-controlChan:
+			if r == 's' {
+				if workerNumber == 0 {
+					turnInfo <- turn
+				}
+				break turnLoop
+			}
+		}
 	}
 
 	out <- threadWorld
 }
 
 //aaa
-func golWorker2B(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInfo int, workers []worker, workerNumber int) {
+func golWorker2B(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightInfo int, workers []worker, workerNumber int, controlChan chan rune) {
 	height := heightInfo + 2
 	width := p.imageWidth
 	thisWorker := workers[workerNumber]
@@ -150,6 +273,7 @@ func golWorker2B(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightI
 			threadWorld[y][x] = cell
 		}
 	}
+turnLoop:
 	for turn := 0; turn < p.turns; turn++ {
 		for x := 0; x < p.imageWidth; x++ {
 			threadWorld[height-1][x] = <-belowWorker.upper
@@ -157,8 +281,13 @@ func golWorker2B(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightI
 			thisWorker.upper <- threadWorld[1][x]
 			thisWorker.lower <- threadWorld[height-2][x]
 		}
-
 		threadWorld = golLogic(threadWorld)
+		select {
+		case r := <-controlChan:
+			if r == 's' {
+				break turnLoop
+			}
+		}
 	}
 
 	out <- threadWorld
@@ -182,14 +311,11 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 	// Create the 2D slice to store the world.
 	// Create new world here
 	world := make([][]byte, p.imageHeight)
-	newWorld := make([][]byte, p.imageHeight)
 	for i := range world {
 		world[i] = make([]byte, p.imageWidth)
-		if p.turns != 0 {
-			newWorld[i] = make([]byte, p.imageWidth)
-		}
-
 	}
+	var worldRef = world
+	turnInfo := make(chan int)
 
 	// Request the io goroutine to read in the image with the given filename.
 	d.io.command <- ioInput
@@ -250,6 +376,8 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		golNonHalos := make([][][]byte, p.threads)
 		//Slice of channel of workers before gol logic
 		golWorkerChans := make([]chan byte, p.threads)
+		//Slice of channels for control signals
+		golWorkerSignals := make([]chan rune, p.threads)
 		//Slice of channel of workers after gol logic
 		golResultChans := make([]chan [][]byte, p.threads)
 		for i := range golResultChans {
@@ -258,125 +386,39 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		for i := range golWorkerChans {
 			golWorkerChans[i] = make(chan byte)
 		}
+		for i := range golWorkerSignals {
+			golWorkerSignals[i] = make(chan rune)
+		}
 		//fmt.Println("workerchan resultchan init")
 
 		//Go routine starts here
 		for i := range golWorkerChans {
 			if i%2 == 0 {
-				go golWorker2A(p, golWorkerChans[i], golResultChans[i], golThreadHeights[i], workers, i)
+				go golWorker2A(p, golWorkerChans[i], golResultChans[i], golThreadHeights[i], workers, i, golWorkerSignals[i], turnInfo)
 			} else {
-				go golWorker2B(p, golWorkerChans[i], golResultChans[i], golThreadHeights[i], workers, i)
+				go golWorker2B(p, golWorkerChans[i], golResultChans[i], golThreadHeights[i], workers, i, golWorkerSignals[i])
 			}
 		}
-		//fmt.Println("go routines all started")
+		go workerController(p, d, worldRef, golWorkerSignals, turnInfo)
 
-		//Upper halo
-		for x := 0; x < p.imageWidth; x++ {
-			for i := range golWorkerChans {
-				golWorkerChans[i] <- world[golCumulativeThreadHeights[((i-1)+p.threads)%p.threads]-1][x]
-			}
-		}
-		//fmt.Println("upper sent")
-		//mid
-		for y := 0; y < golCumulativeThreadHeights[0]; y++ {
-			for x := 0; x < p.imageWidth; x++ {
-				golWorkerChans[0] <- world[y][x]
-			}
-		}
-		for i := 1; i < p.threads; i++ {
-			for y := golCumulativeThreadHeights[i-1]; y < golCumulativeThreadHeights[i]; y++ {
-				for x := 0; x < p.imageWidth; x++ {
-					golWorkerChans[i] <- world[y][x]
-				}
-			}
-		}
-		//fmt.Println("mid sent")
+		sendWorldToWorkers(p, world, golWorkerChans, golCumulativeThreadHeights)
 
-		//Lower halo
-		for x := 0; x < p.imageWidth; x++ {
-			for i := range golWorkerChans {
-				golWorkerChans[i] <- world[golCumulativeThreadHeights[i]%p.imageHeight][x]
-			}
-		}
-		//fmt.Println("lower sent")
+		world = removeHaloAndMergeThreads(p, golResultChans, golHalos, golNonHalos, golThreadHeights, golCumulativeThreadHeights)
 
-		//Remove halo
-		for i := range golResultChans {
-			golHalos[i] = <-golResultChans[i]
-			golNonHalos[i] = removeHalo(golHalos[i])
-			//Passing threads without halo to new world
-			if i == 0 {
-				for y := 0; y < golThreadHeights[0]; y++ {
-					for x := 0; x < p.imageWidth; x++ {
-						newWorld[y][x] = golNonHalos[i][y][x]
-					}
-				}
-			} else {
-				h := 0
-				for y := golCumulativeThreadHeights[i-1]; y < golCumulativeThreadHeights[i]; y++ {
-					for x := 0; x < p.imageWidth; x++ {
-						newWorld[y][x] = golNonHalos[i][h][x]
-					}
-					h++
-				}
-			}
-		}
 		//Updating the world with new world
-		for y := 0; y < p.imageHeight; y++ {
-			for x := 0; x < p.imageWidth; x++ {
-				world[y][x] = newWorld[y][x]
-			}
-		}
-
-	}
-	//fmt.Println("turn done")
-
-	// Calculate the new state of Game of Life after the given number of turns.
-	for turns := 0; turns < p.turns; turns++ {
-		//Keyboard input section
-		//r: input signal from rune channel
-		//t: 2 seconds time signal from bool channel
-		select {
-		case r := <-d.io.keyChan:
-			if r == 's' {
-				outputBoard(p, d, world, turns)
-			}
-			if r == 'p' {
-				fmt.Printf("Execution Paused at turn %d\n", turns)
-				for x := true; x == true; {
-					select {
-					case pauseInput := <-d.io.keyChan:
-						if pauseInput == 's' {
-							outputBoard(p, d, world, turns)
-						}
-						if pauseInput == 'p' {
-							x = false
-							fmt.Println("Continuing")
-						}
-						if pauseInput == 'q' {
-							p.turns = turns
-							x = false
-						}
-					}
+		/*
+			for y := 0; y < p.imageHeight; y++ {
+				for x := 0; x < p.imageWidth; x++ {
+					world[y][x] = newWorld[y][x]
 				}
 			}
-			if r == 'q' {
-				p.turns = turns
-			}
-		case t := <-d.io.timeChan:
-			if t {
-				fmt.Println(len(countAlive(p, world)))
 
-			}
-		default:
-
-		}
-		//Keyboard input section end
+		*/
 
 	}
 
 	finalAlive := countAlive(p, world)
-	outputBoard(p, d, world, p.turns)
+	outputBoard(p, d, worldRef, p.turns)
 
 	// Make sure that the Io has finished any output before exiting.
 	d.io.command <- ioCheckIdle

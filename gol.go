@@ -7,8 +7,8 @@ import (
 )
 
 type worker struct {
-	upper chan byte
-	lower chan byte
+	upper chan []byte
+	lower chan []byte
 }
 
 //Allocates 2D slice of byte
@@ -189,12 +189,12 @@ func golWorkerA(p golParams, rowChan <-chan []byte, out chan<- [][]byte, heightI
 	}
 	//Applying golLogic for every turn
 	for turn := 0; turn < p.turns; turn++ {
-		for x := 0; x < p.imageWidth; x++ { //Exchanging halo
-			thisWorker.upper <- threadWorld[1][x]
-			thisWorker.lower <- threadWorld[height-2][x]
-			threadWorld[height-1][x] = <-belowWorker.upper
-			threadWorld[0][x] = <-aboveWorker.lower
-		}
+		//Exchanging halo
+		thisWorker.upper <- threadWorld[1]
+		thisWorker.lower <- threadWorld[height-2]
+		threadWorld[height-1] = <-belowWorker.upper
+		threadWorld[0] = <-aboveWorker.lower
+
 		threadWorld = golLogic(threadWorld)
 	}
 	//return the final board state after iterating all turns
@@ -217,12 +217,12 @@ func golWorkerB(p golParams, rowChan <-chan []byte, out chan<- [][]byte, heightI
 	}
 	//Applying golLogic for every turn
 	for turn := 0; turn < p.turns; turn++ {
-		for x := 0; x < p.imageWidth; x++ { //Exchanging halo
-			threadWorld[height-1][x] = <-belowWorker.upper
-			threadWorld[0][x] = <-aboveWorker.lower
-			thisWorker.upper <- threadWorld[1][x]
-			thisWorker.lower <- threadWorld[height-2][x]
-		}
+		//Exchanging halo
+		threadWorld[height-1] = <-belowWorker.upper
+		threadWorld[0] = <-aboveWorker.lower
+		thisWorker.upper <- threadWorld[1]
+		thisWorker.lower <- threadWorld[height-2]
+
 		threadWorld = golLogic(threadWorld)
 	}
 	//return the final board state after iterating all turns
@@ -285,11 +285,11 @@ func distributor(p golParams, d distributorChans, alive chan []cell) {
 		}
 
 		//Initialising halo channels
-		aboveHaloExchanges := make([]chan byte, p.threads)
-		belowHaloExchanges := make([]chan byte, p.threads)
+		aboveHaloExchanges := make([]chan []byte, p.threads)
+		belowHaloExchanges := make([]chan []byte, p.threads)
 		for i := 0; i < p.threads; i++ {
-			aboveHaloExchanges[i] = make(chan byte)
-			belowHaloExchanges[i] = make(chan byte)
+			aboveHaloExchanges[i] = make(chan []byte)
+			belowHaloExchanges[i] = make(chan []byte)
 		}
 		workers := make([]worker, p.threads)
 		for i := 0; i < p.threads; i++ {

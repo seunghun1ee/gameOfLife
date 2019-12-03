@@ -113,25 +113,15 @@ func countAlive(p golParams, world [][]byte) []cell {
 	return finalAlive
 }
 
-//After go routines of threads are started, sends the split of the world including initial halos
+//After go routines of threads are started, sends the split of the world
 func sendWorldToWorkers(p golParams, world [][]byte, golWorkerChans []chan byte, golCumulativeThreadHeights []int) {
-	//Upper halo
-	for x := 0; x < p.imageWidth; x++ {
-		for i := range golWorkerChans {
-			if i == 0 {
-				golWorkerChans[0] <- world[golCumulativeThreadHeights[p.threads-1]-1][x]
-			} else {
-				golWorkerChans[i] <- world[golCumulativeThreadHeights[i-1]-1][x]
-			}
-
-		}
-	}
-	//mid
+	//For zeroth thread case
 	for y := 0; y < golCumulativeThreadHeights[0]; y++ {
 		for x := 0; x < p.imageWidth; x++ {
 			golWorkerChans[0] <- world[y][x]
 		}
 	}
+	//For every other cases
 	for i := 1; i < p.threads; i++ {
 		for y := golCumulativeThreadHeights[i-1]; y < golCumulativeThreadHeights[i]; y++ {
 			for x := 0; x < p.imageWidth; x++ {
@@ -139,18 +129,7 @@ func sendWorldToWorkers(p golParams, world [][]byte, golWorkerChans []chan byte,
 			}
 		}
 	}
-
-	//Lower halo
-	for x := 0; x < p.imageWidth; x++ {
-		for i := range golWorkerChans {
-			if i == p.threads-1 {
-				golWorkerChans[i] <- world[0][x]
-			} else {
-				golWorkerChans[i] <- world[golCumulativeThreadHeights[i]][x]
-			}
-
-		}
-	}
+	//Sending only Mid cells, no halos
 }
 
 func removeHaloAndMergeThreads(p golParams, golResultChans []chan [][]byte, golHalos [][][]byte, golNonHalos [][][]byte, golThreadHeights []int, golCumulativeThreadHeights []int) [][]byte {
@@ -190,7 +169,7 @@ func golWorkerA(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightIn
 
 	//Makes thread with incoming cells
 	threadWorld := allocateSlice(height, width)
-	for y := 0; y < height; y++ {
+	for y := 1; y < height-1; y++ {
 		for x := 0; x < width; x++ {
 			cell := <-cellChan
 			threadWorld[y][x] = cell
@@ -199,10 +178,10 @@ func golWorkerA(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightIn
 	//Applying golLogic for every turn
 	for turn := 0; turn < p.turns; turn++ {
 		for x := 0; x < p.imageWidth; x++ { //Exchanging halo
-			thisWorker.upper <- threadWorld[1][x]
-			thisWorker.lower <- threadWorld[height-2][x]
-			threadWorld[height-1][x] = <-belowWorker.upper
-			threadWorld[0][x] = <-aboveWorker.lower
+			thisWorker.upper <- threadWorld[1][x]          //Top row of this thread to lower halo of thread above
+			thisWorker.lower <- threadWorld[height-2][x]   //Bottom row of this thread to upper halo of thread below
+			threadWorld[height-1][x] = <-belowWorker.upper //Top row of thread below to lower halo of this thread
+			threadWorld[0][x] = <-aboveWorker.lower        //Bottom row of thread above to upper halo of this thread
 		}
 		threadWorld = golLogic(threadWorld)
 	}
@@ -220,7 +199,7 @@ func golWorkerB(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightIn
 
 	//Makes thread with incoming cells
 	threadWorld := allocateSlice(height, width)
-	for y := 0; y < height; y++ {
+	for y := 1; y < height-1; y++ {
 		for x := 0; x < width; x++ {
 			cell := <-cellChan
 			threadWorld[y][x] = cell
@@ -229,10 +208,10 @@ func golWorkerB(p golParams, cellChan <-chan byte, out chan<- [][]byte, heightIn
 	//Applying golLogic for every turn
 	for turn := 0; turn < p.turns; turn++ {
 		for x := 0; x < p.imageWidth; x++ { //Exchanging halo
-			threadWorld[height-1][x] = <-belowWorker.upper
-			threadWorld[0][x] = <-aboveWorker.lower
-			thisWorker.upper <- threadWorld[1][x]
-			thisWorker.lower <- threadWorld[height-2][x]
+			threadWorld[height-1][x] = <-belowWorker.upper //Top row of thread below to lower halo of this thread
+			threadWorld[0][x] = <-aboveWorker.lower        //Bottom row of thread above to upper halo of this thread
+			thisWorker.upper <- threadWorld[1][x]          //Top row of this thread to lower halo of thread above
+			thisWorker.lower <- threadWorld[height-2][x]   //Bottom row of this thread to upper halo of thread below
 		}
 		threadWorld = golLogic(threadWorld)
 	}

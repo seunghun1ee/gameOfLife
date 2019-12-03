@@ -1,4 +1,4 @@
-focus ='worker|distributor'
+focus ='golWorkerA|golWorkerB|distributor'
 ignore = 'strings|fmt'
 
 gol:

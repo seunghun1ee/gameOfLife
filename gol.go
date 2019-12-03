@@ -125,7 +125,7 @@ func sendWorldToWorkers(p golParams, world [][]byte, golWorkerChans []chan []byt
 			golWorkerChans[i] <- world[y]
 		}
 	}
-	//Sends Mid rows only, no halos
+	//Sends mid rows only, no halos
 }
 
 func removeHaloAndMergeThreads(p golParams, golResultChans []chan [][]byte, golHalos [][][]byte, golNonHalos [][][]byte, golThreadHeights []int, golCumulativeThreadHeights []int) [][]byte {

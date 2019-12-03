@@ -113,18 +113,8 @@ func countAlive(p golParams, world [][]byte) []cell {
 	return finalAlive
 }
 
-//After go routines of threads are started, sends the split of the world including initial halos
+//After go routines of threads are started, sends the split of the world
 func sendWorldToWorkers(p golParams, world [][]byte, golWorkerChans []chan []byte, golCumulativeThreadHeights []int) {
-	//Upper halo
-
-	for i := range golWorkerChans {
-		if i == 0 {
-			golWorkerChans[0] <- world[golCumulativeThreadHeights[p.threads-1]-1]
-		} else {
-			golWorkerChans[i] <- world[golCumulativeThreadHeights[i-1]-1]
-		}
-	}
-
 	//mid
 	for y := 0; y < golCumulativeThreadHeights[0]; y++ {
 		golWorkerChans[0] <- world[y]
@@ -134,16 +124,6 @@ func sendWorldToWorkers(p golParams, world [][]byte, golWorkerChans []chan []byt
 			golWorkerChans[i] <- world[y]
 		}
 	}
-
-	//Lower halo
-	for i := range golWorkerChans {
-		if i == p.threads-1 {
-			golWorkerChans[i] <- world[0]
-		} else {
-			golWorkerChans[i] <- world[golCumulativeThreadHeights[i]]
-		}
-	}
-
 }
 
 func removeHaloAndMergeThreads(p golParams, golResultChans []chan [][]byte, golHalos [][][]byte, golNonHalos [][][]byte, golThreadHeights []int, golCumulativeThreadHeights []int) [][]byte {
@@ -183,7 +163,7 @@ func golWorkerA(p golParams, rowChan <-chan []byte, out chan<- [][]byte, heightI
 
 	//Makes thread with incoming rows
 	threadWorld := allocateSlice(height, width)
-	for y := 0; y < height; y++ {
+	for y := 1; y < height-1; y++ {
 		row := <-rowChan
 		threadWorld[y] = row
 	}
@@ -211,7 +191,7 @@ func golWorkerB(p golParams, rowChan <-chan []byte, out chan<- [][]byte, heightI
 
 	//Makes thread with incoming rows
 	threadWorld := allocateSlice(height, width)
-	for y := 0; y < height; y++ {
+	for y := 1; y < height-1; y++ {
 		row := <-rowChan
 		threadWorld[y] = row
 	}

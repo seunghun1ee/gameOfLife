@@ -1,0 +1,18 @@
+TIME RESULTS
+Benchmark       Baseline result   Your result       % Difference
+                (ns/1000 turns)   (ns/1000 turns)   The bigger the better
+128x128x2-12     738425214         336678580         219 %
+128x128x4-12     534888417         370397370         144 %
+128x128x8-12     361743675         460548187         78 %
+
+CPU USAGE RESULTS
+Benchmark       Baseline CPU usage   Your CPU usage   % Difference
+                                                      The smaller the better
+128x128x2-12     185 %                142 %            130 %
+128x128x4-12     298 %                167 %            178 %
+128x128x8-12     425 %                225 %            188 %
+This is the percentage of the CPU that this job got. It's computed as (U + S) / E
+Where
+U   Total number of CPU-seconds that the process spent in user mode.
+S   Total number of CPU-seconds that the process spent in kernel mode.
+E   Elapsed real time

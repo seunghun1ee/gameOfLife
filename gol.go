@@ -115,15 +115,17 @@ func countAlive(p golParams, world [][]byte) []cell {
 
 //After go routines of threads are started, sends the split of the world
 func sendWorldToWorkers(p golParams, world [][]byte, golWorkerChans []chan []byte, golCumulativeThreadHeights []int) {
-	//mid
+	//For zeroth thread case
 	for y := 0; y < golCumulativeThreadHeights[0]; y++ {
 		golWorkerChans[0] <- world[y]
 	}
+	//For every other cases
 	for i := 1; i < p.threads; i++ {
 		for y := golCumulativeThreadHeights[i-1]; y < golCumulativeThreadHeights[i]; y++ {
 			golWorkerChans[i] <- world[y]
 		}
 	}
+	//Sends Mid cells only, no halos
 }
 
 func removeHaloAndMergeThreads(p golParams, golResultChans []chan [][]byte, golHalos [][][]byte, golNonHalos [][][]byte, golThreadHeights []int, golCumulativeThreadHeights []int) [][]byte {

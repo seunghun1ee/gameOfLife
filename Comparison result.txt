@@ -1,8 +1,8 @@
 Benchmark       Baseline result   Your result       % Difference
-                (ns/1000 turns)   (ns/1000 turns)   The bigger the better
-128x128x2-12     736880616         733448458         100 %
-128x128x4-12     538721222         627380646         85 %
-128x128x8-12     360461686         661866303         54 %
+                (ms/1000 turns)   (ms/1000 turns)   The bigger the better
+128x128x2-12     736.9             733.4            100 %
+128x128x4-12     538.7             627.4             85 %
+128x128x8-12     360.5             661.9             54 %
 
 CPU USAGE RESULTS
 Benchmark       Baseline CPU usage   Your CPU usage   % Difference
